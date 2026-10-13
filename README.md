@@ -38,6 +38,8 @@ For the default translation engine, install [Ollama](https://ollama.com) and run
  transcript (original + translation)                 ← src/components/TranscriptList.jsx
 ```
 
+- **Languages:** English, Japanese and Thai. The default is Japanese speech → Thai; tap the
+  language names at the top to change it (your choice is remembered).
 - **Listening mode:** one-way. Speech in language 1 is translated into language 2.
 - **Talk mode:** two people take turns, each tapping their own mic button. Lines sit left and
   right like a chat.

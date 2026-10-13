@@ -15,13 +15,13 @@ import { DEFAULT_OLLAMA_MODEL, getTranslator, TRANSLATORS } from './services/tra
 import { downloadCsv } from './utils/csv.js';
 
 // Bump when a changed default should also reach settings saved in the browser.
-const SETTINGS_VERSION = 3;
+const SETTINGS_VERSION = 4;
 
 const DEFAULT_SETTINGS = {
   version: SETTINGS_VERSION,
   mode: 'listening', // 'listening' = one-way translation, 'talk' = two people take turns
-  lang1: 'en',
-  lang2: 'ja',
+  lang1: 'ja', // spoken language (Talk mode: person A)
+  lang2: 'th', // translated into (Talk mode: person B)
   translator: 'ollama', // 'ollama' | 'mymemory'
   ollamaModel: DEFAULT_OLLAMA_MODEL,
   display: 'both', // 'both' | 'translation' | 'original'
@@ -43,6 +43,11 @@ function withDefaults(stored) {
   const version = saved.version ?? 1;
   // v2 made Ollama the default: settings still on the old default (MyMemory) move over once.
   if (version < 2 && saved.translator === 'mymemory') saved.translator = 'ollama';
+  // v4 made Japanese → Thai the default: settings still on the old default pair move over once.
+  if (version < 4 && saved.lang1 === 'en' && saved.lang2 === 'ja') {
+    saved.lang1 = 'ja';
+    saved.lang2 = 'th';
+  }
   // v3 removed the Claude engine; also drop its saved API key from the browser.
   delete saved.claudeApiKey;
   delete saved.claudeModel;
