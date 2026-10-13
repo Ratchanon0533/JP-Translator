@@ -35,7 +35,7 @@ async function send(body, signal) {
   } catch (cause) {
     if (cause?.name === 'AbortError') throw cause;
     // Not running, or refusing this page: retrying won't help, so fail fast.
-    throw new TranslationError("Can't reach Ollama on this computer.", { code: 'unreachable', cause });
+    throw new TranslationError("Can't reach Ollama on this computer.", { code: 'unavailable', cause });
   }
 }
 
@@ -71,10 +71,11 @@ async function readStream(response, onText) {
 
 export const ollama = {
   id: 'ollama',
-  label: 'Ollama',
-  description: 'Free AI such as Qwen, running on this computer. Private, fast and far more natural than MyMemory; needs the Ollama app.',
+  label: 'Qwen on this PC (Ollama)',
+  description: 'Qwen running on this PC through the Ollama app. Free, private and the fastest, but only on this PC.',
   // Local and free, so it can also translate words while they are still being spoken.
   live: true,
+  liveGapMs: 250,
 
   // Load the model before the first sentence so it doesn't wait a minute.
   prepare(settings) {

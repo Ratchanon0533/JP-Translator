@@ -11,18 +11,18 @@ import { useLocalStorage } from './hooks/useLocalStorage.js';
 import { usePrefersDark } from './hooks/usePrefersDark.js';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition.js';
 import { withRetry } from './services/retry.js';
-import { DEFAULT_OLLAMA_MODEL, getTranslator, TRANSLATORS } from './services/translators/index.js';
+import { DEFAULT_OLLAMA_MODEL, ENGINE_CHOICES, engineChain, TRANSLATORS } from './services/translators/index.js';
 import { downloadCsv } from './utils/csv.js';
 
 // Bump when a changed default should also reach settings saved in the browser.
-const SETTINGS_VERSION = 4;
+const SETTINGS_VERSION = 5;
 
 const DEFAULT_SETTINGS = {
   version: SETTINGS_VERSION,
   mode: 'listening', // 'listening' = one-way translation, 'talk' = two people take turns
   lang1: 'ja', // spoken language (Talk mode: person A)
   lang2: 'th', // translated into (Talk mode: person B)
-  translator: 'ollama', // 'ollama' | 'mymemory'
+  translator: 'auto', // 'auto' | 'ollama' | 'cloudflare' (Qwen) | 'gemma' | 'mymemory'
   ollamaModel: DEFAULT_OLLAMA_MODEL,
   display: 'both', // 'both' | 'translation' | 'original'
   textSize: 'm',
@@ -31,10 +31,8 @@ const DEFAULT_SETTINGS = {
 
 const TEXT_SIZES = { s: '1.05rem', m: '1.25rem', l: '1.5rem', xl: '1.9rem' };
 const MAX_HISTORY = 300;
-// How many earlier sentences go along as context (Ollama uses them; MyMemory ignores them).
+// How many earlier sentences go along as context (the Qwen engines use them; MyMemory ignores them).
 const CONTEXT_SIZE = 3;
-// Used when the chosen engine can't be contacted (e.g. Ollama on another device).
-const FALLBACK_ENGINE = 'mymemory';
 
 const makeId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
@@ -51,7 +49,10 @@ function withDefaults(stored) {
   // v3 removed the Claude engine; also drop its saved API key from the browser.
   delete saved.claudeApiKey;
   delete saved.claudeModel;
-  if (!TRANSLATORS[saved.translator]) delete saved.translator;
+  // v5 added "Auto": settings still on the old default (Ollama) move over once.
+  // On this PC Auto still uses Ollama first; on other devices it uses Qwen on Cloudflare.
+  if (version < 5 && saved.translator === 'ollama') saved.translator = 'auto';
+  if (!ENGINE_CHOICES.some((choice) => choice.id === saved.translator)) delete saved.translator;
   const settings = { ...DEFAULT_SETTINGS, ...saved, version: SETTINGS_VERSION };
 
   // Only English, Japanese and Thai are offered; a saved language that was
@@ -75,8 +76,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [notice, setNotice] = useState(null);
-  // Set when the chosen engine couldn't be contacted and MyMemory stood in.
-  const [usingFallback, setUsingFallback] = useState(false);
+  // The engine that translated the last sentence; live translation follows it.
+  const [workingEngine, setWorkingEngine] = useState(null);
 
   // Async work (speech callbacks, retries) reads the latest values through refs.
   const settingsRef = useRef(settings);
@@ -88,7 +89,7 @@ export default function App() {
 
   // The latest live translation of the sentence being spoken (see useLiveTranslation).
   const liveLastRef = useRef(null);
-  // The "using MyMemory instead" message is shown once per visit, not for every sentence.
+  // The "X translated instead" message is shown once per visit, not for every sentence.
   const fallbackNoticeShownRef = useRef(false);
 
   // Remove any transcript an earlier version left in storage.
@@ -108,9 +109,11 @@ export default function App() {
 
   const isDark = settings.theme === 'dark' || (settings.theme === 'system' && prefersDark);
 
-  // Let the chosen engine warm up (Ollama loads its model into the GPU).
+  // Let the first engine warm up (Ollama loads its model into the GPU), and
+  // forget which engine worked last when the choice changes.
   useEffect(() => {
-    getTranslator(settings.translator).prepare?.(settings);
+    engineChain(settings.translator)[0].prepare?.(settings);
+    setWorkingEngine(null);
     // Only re-run when the engine or its model changes, not on every setting.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.translator, settings.ollamaModel]);
@@ -146,27 +149,29 @@ export default function App() {
           },
         );
 
-      let translator = getTranslator(current.translator);
-      try {
-        let translation;
+      // Try the engines in order; one that can't be used right now (Ollama on
+      // another device, Cloudflare not set up, a used-up daily allowance) hands
+      // the sentence to the next one.
+      let firstProblem = null;
+      let lastError = null;
+      for (const translator of engineChain(current.translator)) {
         try {
-          translation = await run(translator);
-        } catch (error) {
-          if (error?.code !== 'unreachable' || translator.id === FALLBACK_ENGINE) throw error;
-          // Ollama only exists on the PC it is installed on (and only answers pages it
-          // trusts). Rather than fail, translate this sentence with the online engine.
-          translator = getTranslator(FALLBACK_ENGINE);
-          setUsingFallback(true);
-          if (!fallbackNoticeShownRef.current) {
+          const translation = await run(translator);
+          updateEntry(entry.id, { state: 'done', translation, engine: translator.id, error: null });
+          setWorkingEngine(translator.id);
+          if (firstProblem && !fallbackNoticeShownRef.current) {
             fallbackNoticeShownRef.current = true;
-            setNotice("Ollama isn't reachable from this page, so MyMemory is translating instead. Settings explains how to fix it.");
+            const problem = firstProblem.message.replace(/([^.!?])$/, '$1.');
+            setNotice(`${problem} ${translator.label} translated instead.`);
           }
-          translation = await run(translator);
+          return;
+        } catch (error) {
+          lastError = error;
+          if (error?.code !== 'unavailable') break;
+          firstProblem ??= error;
         }
-        updateEntry(entry.id, { state: 'done', translation, engine: translator.id, error: null });
-      } catch (error) {
-        updateEntry(entry.id, { state: 'error', error: error?.message ?? String(error) });
       }
+      updateEntry(entry.id, { state: 'error', error: lastError?.message ?? String(lastError) });
     },
     [updateEntry],
   );
@@ -190,8 +195,9 @@ export default function App() {
       const live = liveLastRef.current;
       liveLastRef.current = null;
       if (live && sameText(live.text, text)) {
-        const engine = settingsRef.current.translator;
-        setEntries((list) => [...list, { ...entry, state: 'done', translation: live.translation, engine }].slice(-MAX_HISTORY));
+        setEntries((list) =>
+          [...list, { ...entry, state: 'done', translation: live.translation, engine: live.engine }].slice(-MAX_HISTORY),
+        );
         return;
       }
 
@@ -219,22 +225,26 @@ export default function App() {
     onError: setNotice,
   });
 
-  // While someone is still talking, translate their words as they come in.
-  const translator = getTranslator(settings.translator);
+  // While someone is still talking, translate their words as they come in —
+  // with the engine that handled the last sentence, or else the first choice.
+  // (MyMemory never does this: its small daily limit is kept for finished sentences.)
+  const liveEngine = TRANSLATORS[workingEngine] ?? engineChain(settings.translator)[0];
   const liveMeta = active?.meta;
   const liveTranslation = useLiveTranslation({
-    // Not while MyMemory is standing in: it has a daily limit, so only finished sentences go to it.
-    enabled: Boolean(translator.live && liveMeta && !usingFallback),
+    enabled: Boolean(liveEngine.live && liveMeta),
     text: interim,
     lastRef: liveLastRef,
-    translate: (text) =>
-      translator.translate({
+    minGapMs: liveEngine.liveGapMs,
+    translate: async (text) => ({
+      engine: liveEngine.id,
+      translation: await liveEngine.translate({
         text,
         from: getLanguage(liveMeta.from),
         to: getLanguage(liveMeta.to),
         context: entriesRef.current.slice(-CONTEXT_SIZE).map((entry) => entry.source),
         settings: settingsRef.current,
       }),
+    }),
   });
 
   // Side 'a' speaks language 1; in Talk mode side 'b' speaks language 2.
@@ -244,10 +254,8 @@ export default function App() {
       const [from, to] = side === 'b' ? [current.lang2, current.lang1] : [current.lang1, current.lang2];
       setNotice(null);
       liveLastRef.current = null;
-      // Give the chosen engine another chance (Ollama may have been started meanwhile).
-      setUsingFallback(false);
       // Make sure the model is loaded before the first sentence arrives.
-      getTranslator(current.translator).prepare?.(current);
+      engineChain(current.translator)[0].prepare?.(current);
       start(getLanguage(from).speech, { from, to, side });
     },
     [start],

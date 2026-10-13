@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   DEFAULT_OLLAMA_MODEL,
+  ENGINE_CHOICES,
+  engineChain,
   isLocalPage,
   listOllamaModels,
   ollamaOriginsCommand,
-  TRANSLATORS,
 } from '../services/translators/index.js';
 import { Icon } from './Icon.jsx';
 import { Segmented } from './Segmented.jsx';
@@ -14,8 +15,6 @@ const MODE_OPTIONS = [
   { value: 'listening', label: 'Listening' },
   { value: 'talk', label: 'Talk' },
 ];
-
-const ENGINE_OPTIONS = Object.values(TRANSLATORS).map((t) => ({ value: t.id, label: t.label }));
 
 const DISPLAY_OPTIONS = [
   { value: 'both', label: 'Both' },
@@ -40,7 +39,8 @@ const THEME_OPTIONS = [
 export function SettingsPanel({ open, settings, onChange, onClose, locked, hasHistory, onExport, onClear }) {
   const dialogRef = useRef(null);
   const id = useId();
-  const engine = TRANSLATORS[settings.translator];
+  const engine = ENGINE_CHOICES.find((choice) => choice.id === settings.translator);
+  const usesOllama = engineChain(settings.translator)[0].id === 'ollama';
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -85,15 +85,25 @@ export function SettingsPanel({ open, settings, onChange, onClose, locked, hasHi
         </section>
 
         <section className={styles.section}>
-          <Segmented
-            label="Translation engine"
-            options={ENGINE_OPTIONS}
-            value={settings.translator}
-            onChange={(translator) => onChange({ translator })}
-          />
+          {/* A dropdown: five choices don't fit side by side. */}
+          <div className={styles.field}>
+            <label htmlFor={`${id}-engine`}>Translation engine</label>
+            <select
+              id={`${id}-engine`}
+              className="select"
+              value={settings.translator}
+              onChange={(event) => onChange({ translator: event.target.value })}
+            >
+              {ENGINE_CHOICES.map((choice) => (
+                <option key={choice.id} value={choice.id}>
+                  {choice.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <p className={styles.note}>{engine?.description}</p>
 
-          {settings.translator === 'ollama' && (
+          {usesOllama && (
             <OllamaModelPicker
               id={`${id}-ollama`}
               open={open}
@@ -101,7 +111,6 @@ export function SettingsPanel({ open, settings, onChange, onClose, locked, hasHi
               onChange={(ollamaModel) => onChange({ ollamaModel })}
             />
           )}
-
         </section>
 
         <section className={styles.section}>
@@ -151,7 +160,7 @@ function OllamaModelPicker({ id, open, value, onChange }) {
       return (
         <p className={styles.warning}>
           Ollama isn&apos;t running on this computer. Start the Ollama app, then reopen Settings. Until then,
-          MyMemory translates instead.
+          the next engine translates instead.
         </p>
       );
     }
@@ -159,7 +168,7 @@ function OllamaModelPicker({ id, open, value, onChange }) {
     return (
       <div className={styles.warning}>
         <p>
-          This page can&apos;t reach Ollama, so MyMemory translates instead. Ollama only works on the PC it&apos;s
+          This page can&apos;t reach Ollama, so the next engine translates instead. Ollama only works on the PC it&apos;s
           installed on, and only for sites it trusts. To use it here, on that PC:
         </p>
         <ol className={styles.steps}>

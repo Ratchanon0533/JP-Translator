@@ -16,8 +16,19 @@ npm run dev
 Open <http://localhost:5174> in **Chrome or Edge** (desktop or Android) or **Safari**. Allow the
 microphone when asked. Firefox can't recognize speech, but you can still type.
 
-For the default translation engine, install [Ollama](https://ollama.com) and run
-`ollama pull qwen3:8b` once.
+On your own PC, install [Ollama](https://ollama.com) and run `ollama pull qwen3:8b` once for the
+fastest translations.
+
+## Deploy (Cloudflare Pages)
+
+1. `npm run build`, then upload the `dist` folder in the Pages dashboard (drag and drop works).
+   `dist/_worker.js` is the small server part; it comes from `public/_worker.js`.
+2. Once: Pages project → **Settings → Bindings → Add → Workers AI**, variable name `AI`,
+   then upload again. This turns on Qwen (and Gemma as its backup) on Cloudflare for every
+   device, phones too. No separate Worker is needed: `_worker.js` runs inside the Pages project.
+3. Keep the Cloudflare account on the **Workers Free** plan: it has no paid usage, so it can't
+   cost anything. When the 10,000 free daily Neurons (≈ thousands of sentences) are used up,
+   the app switches to MyMemory until 00:00 UTC (07:00 in Thailand).
 
 ## How it works
 
@@ -31,8 +42,12 @@ For the default translation engine, install [Ollama](https://ollama.com) and run
              │
              ▼
  translator.translate()                              ← src/services/translators/
-     ├── Ollama    – free AI (Qwen) running on this PC (default)
-     └── MyMemory  – free online machine translation, no install
+     ├── Ollama    – Qwen3 8B on this PC (fastest, only on this PC)
+     ├── Qwen      – Qwen3 30B on Cloudflare Workers AI (any device) ← public/_worker.js
+     ├── Gemma     – Google's Gemma 4 26B on Cloudflare (second choice, same free allowance)
+     └── MyMemory  – basic online machine translation (last resort)
+             │  "Auto" (default) tries them in that order; an engine that can't be
+             │  used right now hands the sentence to the next one
              │  fails? retry 1s → 2s → 4s … (+ jitter) ← src/services/retry.js
              ▼
  transcript (original + translation)                 ← src/components/TranscriptList.jsx
@@ -56,7 +71,8 @@ browser to decide a sentence was finished**, which Chrome does only after a paus
 more. So, like Mirai (which splits speech instead of waiting for the speaker to stop):
 
 1. **Live translation** (`hooks/useLiveTranslation.js`): while you are still talking, the words
-   so far are translated and shown under the caption. Only with Ollama, since it is local and free.
+   so far are translated and shown under the caption. With Ollama (local, unlimited) and, less
+   often, with Qwen on Cloudflare (to save the daily allowance); never with MyMemory.
 2. **No waiting for Chrome** (`hooks/useSpeechRecognition.js`): when the words haven't changed for
    0.8 s, the app asks Chrome to finish the sentence and keeps listening. If the live translation
    already matches the finished sentence, it is used immediately.
@@ -72,7 +88,7 @@ A short pause in the middle of a sentence may split it into two lines; that is t
 |---|---|
 | Next.js static export on S3 + CloudFront | Vite + React single-page app |
 | AudioWorklet → 16 kHz PCM → WebSocket → Mirai's servers | Web Speech API. The browser sends audio to its own speech service (Google, in Chrome) |
-| Server-side translation (cascade, now End2End) | `translators/`: Ollama (local Qwen) or MyMemory |
+| Server-side translation (cascade, now End2End) | Qwen on this PC (Ollama) or on Cloudflare Workers AI (`_worker.js`), MyMemory as fallback |
 | Splits speech at readable points instead of waiting | Live translation + finishing a sentence after 0.8 s without change |
 | `vendorStrategyAtom` swaps engines (type_a / type_s) | `translators/index.js` registry with the same `translate()` shape |
 | REST retry with exponential backoff and jitter | `services/retry.js` |
@@ -84,6 +100,8 @@ A short pause in the middle of a sentence may split it into two lines; that is t
 ## Project structure
 
 ```
+public/
+  _worker.js                    Cloudflare server part: POST /api/translate → Qwen on Workers AI
 src/
   App.jsx                       wires speech → translation → transcript
   config/languages.js           language codes for speech and translation
@@ -94,7 +112,7 @@ src/
     usePrefersDark.js           follows the system's light/dark mode
   services/
     retry.js                    exponential backoff
-    translators/                Ollama, MyMemory, shared prompt and error type
+    translators/                Ollama, Cloudflare, MyMemory, engine order ("Auto"), shared prompt
   components/                   Header (language switch), TranscriptList, ControlDock,
                                 SettingsPanel, ConfirmDialog, Segmented, Icon
   utils/                        CSV export, time formatting
@@ -103,11 +121,16 @@ src/
 ## Things to know
 
 - **Privacy:** in Chrome, speech recognition runs on Google's servers. With Ollama, translation
-  stays on your PC; with MyMemory, the text goes to MyMemory.
-- **Ollama** (the default) runs an open model such as Qwen on your own GPU: free, private, and
-  much more natural than MyMemory. The first sentence after a restart can take up to a minute
-  while the model loads; after that it's well under a second. It only works on the PC running
-  Ollama, so on other devices switch to MyMemory in Settings.
+  stays on your PC; with Cloudflare or MyMemory, the text goes to them.
+- **Ollama** runs Qwen on your own GPU: free, private, unlimited and the fastest. The first
+  sentence after a restart can take up to a minute while the model loads; after that it's well
+  under a second. It only works on the PC running Ollama. A deployed copy can use it too after
+  `setx OLLAMA_ORIGINS "https://<your-site>"` (Settings shows the exact command) — choose
+  *Ollama* in Settings for that, since *Auto* only tries Ollama on localhost.
+- **Qwen on Cloudflare** (Qwen3 30B, Workers AI free plan) works on every device. If that model
+  ever fails (e.g. retired or moved to the paid plan), **Gemma 4 26B** takes over; both share
+  the same free daily allowance. `_worker.js` only accepts short English/Japanese/Thai
+  translations from the site's own pages, so others can't spend the allowance on something else.
 - **MyMemory** allows roughly 5,000 characters a day for free. Its own "best" answer is often a
   junk crowd-sourced entry (e.g. "hello" → empty, "こんばんは" → a Wikipedia title), so
   `mymemory.js` picks from all candidates itself: right script, exact phrase, majority vote,
