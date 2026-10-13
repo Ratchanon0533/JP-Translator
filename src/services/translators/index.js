@@ -1,7 +1,7 @@
 import { mymemory } from './mymemory.js';
 import { ollama } from './ollama.js';
 
-export { DEFAULT_OLLAMA_MODEL, listOllamaModels } from './ollama.js';
+export { DEFAULT_OLLAMA_MODEL, isLocalPage, listOllamaModels, ollamaOriginsCommand } from './ollama.js';
 export { TranslationError } from './errors.js';
 
 // Every translator has the same shape: { id, label, description, translate() },

@@ -79,6 +79,27 @@
   font-size: 0.85em;
 }
 
+.steps {
+  margin: 6px 0 0;
+  padding-left: 1.2em;
+}
+
+.steps li + li {
+  margin-top: 4px;
+}
+
+/* Selectable as one piece, so it is easy to copy. */
+.command {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

@@ -8,19 +8,17 @@ const MAX_BYTES = 450;
 const encoder = new TextEncoder();
 const byteLength = (text) => encoder.encode(text).length;
 
-// These languages are written without spaces between words.
-const NO_SPACES = new Set(['ja', 'zh', 'th']);
+// Japanese and Thai are written without spaces between words.
+const NO_SPACES = new Set(['ja', 'th']);
 
 // The writing system each language uses. A "Japanese translation" with no
 // Japanese characters in it (like "hi" or "konnichiwa") is junk.
-const LATIN = /\p{Script=Latin}/u;
 const SCRIPTS = {
+  en: /\p{Script=Latin}/u,
   ja: /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u,
-  zh: /\p{Script=Han}/u,
-  ko: /\p{Script=Hangul}/u,
   th: /\p{Script=Thai}/u,
 };
-const scriptOf = (language) => SCRIPTS[language.id] ?? LATIN;
+const scriptOf = (language) => SCRIPTS[language.id] ?? SCRIPTS.en;
 
 // For comparing phrases: ignore case, extra spaces and a closing full stop / ! / ?.
 const ENDING = /[.!?。！？]+$/u;
@@ -103,7 +101,7 @@ async function translateChunk(query, from, to) {
   // translator, so if every stored entry was junk there is nothing left.
   // Adding a full stop makes it a new phrase and the machine translator runs;
   // the full stop is removed from the answer again.
-  const stop = NO_SPACES.has(from.id) ? '。' : '.';
+  const stop = from.id === 'ja' ? '。' : '.';
   const retry = pickTranslation(await lookUp(query + stop, from, to), query + stop, from, to);
   return retry?.replace(/[.。]$/u, '') ?? null;
 }

@@ -23,12 +23,19 @@ export async function listOllamaModels() {
   return (data.models ?? []).map((model) => model.name);
 }
 
+// Ollama only answers web pages it trusts: by default, pages served from this
+// computer (localhost). A deployed copy, e.g. on Cloudflare Pages, has to be
+// added with OLLAMA_ORIGINS — and it can only ever reach the PC it runs on.
+export const isLocalPage = () => ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
+export const ollamaOriginsCommand = () => `setx OLLAMA_ORIGINS "${window.location.origin}"`;
+
 async function send(body, signal) {
   try {
     return await post('/api/chat', body, signal);
   } catch (cause) {
     if (cause?.name === 'AbortError') throw cause;
-    throw new TranslationError("Can't reach Ollama. Make sure the Ollama app is running.", { retryable: true, cause });
+    // Not running, or refusing this page: retrying won't help, so fail fast.
+    throw new TranslationError("Can't reach Ollama on this computer.", { code: 'unreachable', cause });
   }
 }
 

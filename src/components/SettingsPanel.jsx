@@ -1,5 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { DEFAULT_OLLAMA_MODEL, listOllamaModels, TRANSLATORS } from '../services/translators/index.js';
+import {
+  DEFAULT_OLLAMA_MODEL,
+  isLocalPage,
+  listOllamaModels,
+  ollamaOriginsCommand,
+  TRANSLATORS,
+} from '../services/translators/index.js';
 import { Icon } from './Icon.jsx';
 import { Segmented } from './Segmented.jsx';
 import styles from './SettingsPanel.module.css';
@@ -141,10 +147,29 @@ function OllamaModelPicker({ id, open, value, onChange }) {
 
   if (models === null) return <p className={styles.note}>Looking for Ollama…</p>;
   if (models === 'offline') {
+    if (isLocalPage()) {
+      return (
+        <p className={styles.warning}>
+          Ollama isn&apos;t running on this computer. Start the Ollama app, then reopen Settings. Until then,
+          MyMemory translates instead.
+        </p>
+      );
+    }
+    // A deployed copy (e.g. on Cloudflare Pages): Ollama refuses pages it doesn't trust.
     return (
-      <p className={styles.warning}>
-        Ollama isn&apos;t running on this computer. Start the Ollama app, then reopen Settings.
-      </p>
+      <div className={styles.warning}>
+        <p>
+          This page can&apos;t reach Ollama, so MyMemory translates instead. Ollama only works on the PC it&apos;s
+          installed on, and only for sites it trusts. To use it here, on that PC:
+        </p>
+        <ol className={styles.steps}>
+          <li>
+            Run <code className={styles.command}>{ollamaOriginsCommand()}</code>
+          </li>
+          <li>Quit Ollama from the taskbar tray and start it again.</li>
+          <li>Reload this page, and choose Allow if the browser asks about apps on this device.</li>
+        </ol>
+      </div>
     );
   }
   if (models.length === 0) {
