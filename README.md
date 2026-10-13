@@ -24,7 +24,7 @@ fastest translations.
 1. `npm run build`, then upload the `dist` folder in the Pages dashboard (drag and drop works).
    `dist/_worker.js` is the small server part; it comes from `public/_worker.js`.
 2. Once: Pages project → **Settings → Bindings → Add → Workers AI**, variable name `AI`,
-   then upload again. This turns on Qwen (and Gemma as its backup) on Cloudflare for every
+   then upload again. This turns on Gemma (and Qwen as its backup) on Cloudflare for every
    device, phones too. No separate Worker is needed: `_worker.js` runs inside the Pages project.
 3. Keep the Cloudflare account on the **Workers Free** plan: it has no paid usage, so it can't
    cost anything. When the 10,000 free daily Neurons (≈ thousands of sentences) are used up,
@@ -42,9 +42,9 @@ fastest translations.
              │
              ▼
  translator.translate()                              ← src/services/translators/
-     ├── Ollama    – Qwen3 8B on this PC (fastest, only on this PC)
-     ├── Qwen      – Qwen3 30B on Cloudflare Workers AI (any device) ← public/_worker.js
-     ├── Gemma     – Google's Gemma 4 26B on Cloudflare (second choice, same free allowance)
+     ├── Ollama    – Qwen3 8B on this PC (fastest, only when the site runs on this PC)
+     ├── Gemma     – Google's Gemma 4 26B on Cloudflare Workers AI (any device) ← public/_worker.js
+     ├── Qwen      – Qwen3 30B on Cloudflare (Gemma's backup; weaker at Thai)
      └── MyMemory  – basic online machine translation (last resort)
              │  "Auto" (default) tries them in that order; an engine that can't be
              │  used right now hands the sentence to the next one
@@ -127,9 +127,10 @@ src/
   under a second. It only works on the PC running Ollama. A deployed copy can use it too after
   `setx OLLAMA_ORIGINS "https://<your-site>"` (Settings shows the exact command) — choose
   *Ollama* in Settings for that, since *Auto* only tries Ollama on localhost.
-- **Qwen on Cloudflare** (Qwen3 30B, Workers AI free plan) works on every device. If that model
-  ever fails (e.g. retired or moved to the paid plan), **Gemma 4 26B** takes over; both share
-  the same free daily allowance. `_worker.js` only accepts short English/Japanese/Thai
+- **Gemma on Cloudflare** (Gemma 4 26B, Workers AI free plan) works on every device and gave
+  the most natural Thai and Japanese in tests (e.g. อรุณสวัสดิ์ → おはようございます, where
+  Qwen3 30B answered 朝の挨拶 "morning greeting"). If Gemma ever fails, **Qwen3 30B** takes
+  over; both share the same free daily allowance. `_worker.js` only accepts short English/Japanese/Thai
   translations from the site's own pages, so others can't spend the allowance on something else.
 - **MyMemory** allows roughly 5,000 characters a day for free. Its own "best" answer is often a
   junk crowd-sourced entry (e.g. "hello" → empty, "こんばんは" → a Wikipedia title), so

@@ -15,7 +15,7 @@ import { DEFAULT_OLLAMA_MODEL, ENGINE_CHOICES, engineChain, TRANSLATORS } from '
 import { downloadCsv } from './utils/csv.js';
 
 // Bump when a changed default should also reach settings saved in the browser.
-const SETTINGS_VERSION = 5;
+const SETTINGS_VERSION = 6;
 
 const DEFAULT_SETTINGS = {
   version: SETTINGS_VERSION,
@@ -52,6 +52,9 @@ function withDefaults(stored) {
   // v5 added "Auto": settings still on the old default (Ollama) move over once.
   // On this PC Auto still uses Ollama first; on other devices it uses Qwen on Cloudflare.
   if (version < 5 && saved.translator === 'ollama') saved.translator = 'auto';
+  // v6 put Gemma before Qwen on Cloudflare (Qwen got simple Thai wrong): anyone who had
+  // picked Qwen on Cloudflare moves to Auto once, which now uses Gemma first.
+  if (version < 6 && saved.translator === 'cloudflare') saved.translator = 'auto';
   if (!ENGINE_CHOICES.some((choice) => choice.id === saved.translator)) delete saved.translator;
   const settings = { ...DEFAULT_SETTINGS, ...saved, version: SETTINGS_VERSION };
 

@@ -1,4 +1,4 @@
-import { cloudflareGemma, cloudflareQwen } from './cloudflare.js';
+import { cloudflareGemma } from './cloudflare.js';
 import { mymemory } from './mymemory.js';
 import { isLocalPage, ollama } from './ollama.js';
 
@@ -12,7 +12,6 @@ export { TranslationError } from './errors.js';
 // (type_a / type_s) that swaps engines.
 export const TRANSLATORS = {
   [ollama.id]: ollama,
-  [cloudflareQwen.id]: cloudflareQwen,
   [cloudflareGemma.id]: cloudflareGemma,
   [mymemory.id]: mymemory,
 };
@@ -23,13 +22,13 @@ export const ENGINE_CHOICES = [
     id: 'auto',
     label: 'Auto (recommended)',
     description:
-      'Uses the best free engine that works here: Ollama when the site runs on this PC, then Qwen on Cloudflare, then Gemma on Cloudflare, and MyMemory as a last resort.',
+      'Uses the best free engine that works here: Ollama when the site runs on this PC, then Gemma on Cloudflare, and MyMemory as a last resort.',
   },
   ...Object.values(TRANSLATORS),
 ];
 
 // From best to most basic.
-const ORDER = [ollama.id, cloudflareQwen.id, cloudflareGemma.id, mymemory.id];
+const ORDER = [ollama.id, cloudflareGemma.id, mymemory.id];
 
 // The engines to try for a sentence, in order. When one can't be used right
 // now (not running, not set up, model unavailable, today's free allowance used
