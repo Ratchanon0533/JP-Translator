@@ -30,9 +30,10 @@
 }
 
 /* Plain text that happens to be a <select>: no box, just the language name
-   (the shared .dropdown style draws its list). */
+   (the shared .dropdown style draws its list). It never wraps: Japanese can
+   break between any two characters, so a squeezed 日本語 would stack up. */
 .select {
-  min-width: 0;
+  flex: none;
   field-sizing: content;
   padding: 6px 10px;
   border: 0;
@@ -41,8 +42,12 @@
   font-size: 1rem;
   font-weight: 700;
   text-align: center;
-  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
+}
+
+.langs .select {
+  gap: 4px;
 }
 
 .select:hover:not(:disabled) {
@@ -81,4 +86,45 @@
 /* Practice Kanji's toggle tilts a little on hover. */
 .themeToggle:hover {
   transform: rotate(-20deg);
+}
+
+/* Phones: the side columns shrink to just the logo and the two buttons, so the
+   language names get the room in between. */
+@media (max-width: 480px) {
+  .header {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 6px;
+    padding: 12px;
+  }
+
+  .langs {
+    gap: 0;
+  }
+
+  .select {
+    padding: 6px;
+  }
+
+  .langs :global(.iconButton) {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* Very small phones: drop the little arrows and shrink the round buttons a bit. */
+@media (max-width: 360px) {
+  .actions {
+    gap: 6px;
+  }
+
+  .actions :global(.iconButton) {
+    width: 34px;
+    height: 34px;
+  }
+
+  @supports (appearance: base-select) {
+    .select::picker-icon {
+      display: none;
+    }
+  }
 }
