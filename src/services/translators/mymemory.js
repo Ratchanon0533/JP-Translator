@@ -127,7 +127,7 @@ async function lookUp(query, from, to) {
   const status = Number(data?.responseStatus);
   if (status === 429 || data?.quotaFinished) {
     // The free daily quota is used up; retrying today won't help.
-    throw new TranslationError('MyMemory free daily limit reached. Switch to Claude in Settings or try tomorrow.');
+    throw new TranslationError('MyMemory free daily limit reached. Switch to Ollama in Settings or try tomorrow.');
   }
   if (status !== 200) {
     throw new TranslationError(`MyMemory: ${data?.responseDetails || 'unexpected response'}`, { retryable: status >= 500 });
@@ -145,7 +145,7 @@ export const mymemory = {
     for (const chunk of splitText(text)) {
       const translation = await translateChunk(chunk, from, to);
       if (!translation) {
-        throw new TranslationError('MyMemory has no reliable translation for this. Try Claude in Settings.');
+        throw new TranslationError('MyMemory has no reliable translation for this. Try Ollama in Settings.');
       }
       results.push(translation);
     }

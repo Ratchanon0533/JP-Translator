@@ -1,4 +1,4 @@
-// The instructions given to AI translators (Claude, or Qwen through Ollama).
+// The instructions given to the AI translator (Qwen through Ollama).
 
 export const systemPrompt = (from, to) => `You are the translation engine of a live speech translator.
 Translate the text inside <utterance> from ${from.english} into ${to.english}.

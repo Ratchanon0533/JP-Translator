@@ -12,9 +12,10 @@
 
 .options {
   display: flex;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
   overflow: hidden;
+  background: var(--surface);
 }
 
 .option {
@@ -42,19 +43,21 @@
 .option span {
   display: block;
   padding: 8px 10px;
-  color: var(--muted);
+  color: var(--ink-soft);
   font-size: 0.85rem;
   text-align: center;
   white-space: nowrap;
 }
 
+/* Selected option, as in Practice Kanji: crimson on a soft red tint. */
 .option input:checked + span {
-  background: var(--text);
-  color: var(--bg);
+  background: color-mix(in srgb, var(--accent-soft) 60%, var(--surface));
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .option input:focus-visible + span {
-  outline: 2px solid var(--text);
+  outline: 2px solid var(--accent);
   outline-offset: -4px;
 }
 

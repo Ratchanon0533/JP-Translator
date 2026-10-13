@@ -1,15 +1,24 @@
+/* Equal side columns keep the language switch centred. */
 .header {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  grid-template-columns: minmax(84px, 1fr) minmax(0, auto) minmax(84px, 1fr);
   align-items: center;
   gap: 8px;
   padding: 14px 16px;
 }
 
+/* Same mark as Practice Kanji's logo: a serif character on a crimson tile. */
 .mark {
-  font-size: 1.15rem;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-kanji);
+  font-size: 1.35rem;
   font-weight: 700;
-  text-align: center;
 }
 
 .langs {
@@ -23,14 +32,13 @@
 /* Plain text that happens to be a <select>: no box, just the language name. */
 .select {
   min-width: 0;
-  max-width: 42%;
   field-sizing: content;
-  padding: 6px 8px;
+  padding: 6px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 999px;
   background: transparent;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 700;
   text-align: center;
   text-overflow: ellipsis;
   appearance: none;
@@ -38,10 +46,21 @@
 }
 
 .select:hover:not(:disabled) {
-  background: var(--soft);
+  background: var(--surface-2);
 }
 
 .select option {
-  background: var(--bg);
-  color: var(--text);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Practice Kanji's toggle tilts a little on hover. */
+.themeToggle:hover {
+  transform: rotate(-20deg);
 }

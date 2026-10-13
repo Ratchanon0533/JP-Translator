@@ -2,10 +2,10 @@ import { LANGUAGES } from '../config/languages.js';
 import { Icon } from './Icon.jsx';
 import styles from './Header.module.css';
 
-// One quiet row: mark · language switch · settings.
+// One quiet row: mark · language switch · theme switch + settings.
 // Like Mirai, languages are locked while listening: changing them
 // mid-session would mix two directions in one recognizer.
-export function Header({ settings, onChange, locked, onOpenSettings }) {
+export function Header({ settings, onChange, locked, isDark, onToggleTheme, onOpenSettings }) {
   const { mode, lang1, lang2 } = settings;
   const talk = mode === 'talk';
   const lockedTitle = locked ? 'Stop listening to change languages' : undefined;
@@ -19,7 +19,7 @@ export function Header({ settings, onChange, locked, onOpenSettings }) {
   return (
     <header className={styles.header}>
       <h1 className="visually-hidden">JP Translator</h1>
-      <span className={styles.mark} aria-hidden="true">
+      <span className={styles.mark} lang="ja" aria-hidden="true">
         訳
       </span>
 
@@ -32,7 +32,7 @@ export function Header({ settings, onChange, locked, onOpenSettings }) {
         />
         <button
           type="button"
-          className="iconButton"
+          className="iconButton iconButtonPlain"
           onClick={() => onChange({ lang1: lang2, lang2: lang1 })}
           disabled={locked}
           aria-label="Swap languages"
@@ -48,9 +48,20 @@ export function Header({ settings, onChange, locked, onOpenSettings }) {
         />
       </div>
 
-      <button type="button" className="iconButton" onClick={onOpenSettings} aria-label="Settings" title="Settings">
-        <Icon name="settings" />
-      </button>
+      <div className={styles.actions}>
+        <button
+          type="button"
+          className={`iconButton ${styles.themeToggle}`}
+          onClick={onToggleTheme}
+          aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+          title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+        >
+          <Icon name={isDark ? 'sun' : 'moon'} size={18} />
+        </button>
+        <button type="button" className="iconButton" onClick={onOpenSettings} aria-label="Settings" title="Settings">
+          <Icon name="settings" size={18} />
+        </button>
+      </div>
     </header>
   );
 }

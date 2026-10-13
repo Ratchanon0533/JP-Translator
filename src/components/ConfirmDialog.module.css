@@ -3,12 +3,12 @@
   padding: 20px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .dialog::backdrop {
-  background: rgb(0 0 0 / 30%);
+  background: rgb(20 15 10 / 55%);
 }
 
 .title {
@@ -18,7 +18,7 @@
 }
 
 .message {
-  color: var(--muted);
+  color: var(--ink-soft);
   font-size: 0.9rem;
 }
 

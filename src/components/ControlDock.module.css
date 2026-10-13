@@ -9,7 +9,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  color: var(--live);
+  color: var(--bad);
   font-size: 0.875rem;
 }
 
@@ -21,12 +21,29 @@
   color: inherit;
 }
 
-.caption {
-  max-height: 4.5em;
+.live {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   padding: 0 4px;
+}
+
+.caption,
+.liveTranslation {
+  max-height: 4.5em;
   overflow-y: auto;
-  color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+.caption {
+  color: var(--ink-soft);
+}
+
+/* Provisional: replaced by the finished translation once the sentence ends. */
+.liveTranslation {
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 500;
 }
 
 .talk {
@@ -34,6 +51,7 @@
   gap: 8px;
 }
 
+/* Talk-mode mic buttons: outlined pills, like Practice Kanji's ghost buttons. */
 .pill {
   display: flex;
   flex: 1;
@@ -43,14 +61,17 @@
   min-width: 0;
   min-height: 44px;
   padding: 0 14px;
-  border: 1px solid var(--line);
+  border: 1.5px solid var(--line);
   border-radius: 999px;
-  background: transparent;
+  background: var(--surface);
   font-weight: 600;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .pill:hover {
-  border-color: var(--muted);
+  border-color: var(--accent);
 }
 
 .bar {
@@ -59,22 +80,24 @@
   gap: 8px;
 }
 
+/* Same look as Practice Kanji's search field. */
 .input {
   flex: 1;
   min-width: 0;
   min-height: 48px;
   padding: 0 18px;
-  border: 0;
+  border: 1.5px solid var(--line);
   border-radius: 999px;
-  background: var(--soft);
+  background: var(--surface);
+}
+
+.input:focus {
+  border-color: var(--accent);
+  outline: none;
 }
 
 .input::placeholder {
-  color: var(--muted);
-}
-
-.input:focus-visible {
-  outline-offset: 0;
+  color: var(--ink-faint);
 }
 
 .round {
@@ -85,31 +108,34 @@
   height: 48px;
   border: 0;
   border-radius: 999px;
-  background: var(--text);
-  color: var(--bg);
+  background: var(--accent);
+  color: var(--accent-ink);
+  transition:
+    transform 0.12s ease,
+    filter 0.15s ease;
 }
 
 .round:hover {
-  opacity: 0.85;
+  filter: brightness(1.06);
+  transform: translateY(-1px);
 }
 
 .recording,
 .recording:hover {
-  border-color: var(--live);
-  background: var(--live);
-  color: #fff;
-  opacity: 1;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
   animation: ring 1.6s ease-in-out infinite;
 }
 
 @keyframes ring {
   50% {
-    box-shadow: 0 0 0 6px color-mix(in srgb, var(--live) 22%, transparent);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 22%, transparent);
   }
 }
 
 .hint {
-  color: var(--muted);
+  color: var(--ink-faint);
   font-size: 0.8rem;
   text-align: center;
 }

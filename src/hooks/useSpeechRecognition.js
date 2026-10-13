@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-const Recognition =
-  typeof window === 'undefined' ? undefined : window.SpeechRecognition ?? window.webkitSpeechRecognition;
+// Looked up each time rather than once, so a test can stand in a fake recognizer.
+const getRecognition = () =>
+  typeof window === 'undefined' ? undefined : (window.SpeechRecognition ?? window.webkitSpeechRecognition);
 
 const ERROR_MESSAGES = {
   'not-allowed': 'Microphone access is blocked. Allow the microphone for this site, then press Start again.',
@@ -15,6 +16,12 @@ const ERROR_MESSAGES = {
 // restart it. If that happens too often in a short time, something is wrong.
 const MAX_RESTARTS = 5;
 const RESTART_WINDOW_MS = 10_000;
+
+// Chrome only marks a sentence "final" after a pause of a second or more, and
+// in quick conversation it can hold it much longer. When the words haven't
+// changed for this long, we ask Chrome to finish the sentence right away
+// (Mirai likewise splits speech instead of waiting for the speaker to stop).
+const COMMIT_AFTER_MS = 800;
 
 // Wraps the browser's Web Speech API. This replaces Mirai's whole audio
 // pipeline (AudioWorklet → 16 kHz PCM → WebSocket → speech server): the
@@ -41,6 +48,7 @@ export function useSpeechRecognition({ onFinal, onError }) {
   }, []);
 
   const clear = useCallback(() => {
+    clearTimeout(sessionRef.current?.commitTimer);
     sessionRef.current = null;
     setActive(null);
     setPending('');
@@ -55,6 +63,7 @@ export function useSpeechRecognition({ onFinal, onError }) {
 
   const start = useCallback(
     (lang, meta) => {
+      const Recognition = getRecognition();
       if (!Recognition) return;
 
       const previous = sessionRef.current;
@@ -72,8 +81,19 @@ export function useSpeechRecognition({ onFinal, onError }) {
       rec.interimResults = true;
       rec.maxAlternatives = 1;
 
-      const session = { rec, meta, restarts: [] };
+      const session = { rec, meta, restarts: [], commitTimer: null, committing: false };
       const isCurrent = () => sessionRef.current === session;
+
+      const scheduleCommit = (pending) => {
+        clearTimeout(session.commitTimer);
+        if (!pending.trim()) return;
+        session.commitTimer = setTimeout(() => {
+          if (!isCurrent() || interimRef.current !== pending) return;
+          session.committing = true;
+          // Chrome turns the words so far into a final result, then ends; onend restarts it.
+          rec.stop();
+        }, COMMIT_AFTER_MS);
+      };
 
       rec.onresult = (event) => {
         let pending = '';
@@ -86,7 +106,10 @@ export function useSpeechRecognition({ onFinal, onError }) {
             pending += text;
           }
         }
-        if (isCurrent()) setPending(pending);
+        if (isCurrent()) {
+          setPending(pending);
+          scheduleCommit(pending);
+        }
       };
 
       rec.onerror = (event) => {
@@ -96,16 +119,27 @@ export function useSpeechRecognition({ onFinal, onError }) {
       };
 
       rec.onend = () => {
+        clearTimeout(session.commitTimer);
         if (!isCurrent()) return;
-        const now = Date.now();
-        session.restarts = session.restarts.filter((time) => now - time < RESTART_WINDOW_MS);
-        session.restarts.push(now);
-        if (session.restarts.length > MAX_RESTARTS) {
-          clear();
-          handlersRef.current.onError?.('Speech recognition keeps stopping. Press Start to try again.');
-          return;
-        }
+
+        // Words that never became a final result would otherwise be lost.
+        const leftover = interimRef.current.trim();
+        if (leftover) handlersRef.current.onFinal(leftover, meta);
         setPending('');
+
+        if (session.committing) {
+          // We ended it on purpose to finish a sentence; that isn't the browser giving up.
+          session.committing = false;
+        } else {
+          const now = Date.now();
+          session.restarts = session.restarts.filter((time) => now - time < RESTART_WINDOW_MS);
+          session.restarts.push(now);
+          if (session.restarts.length > MAX_RESTARTS) {
+            clear();
+            handlersRef.current.onError?.('Speech recognition keeps stopping. Press Start to try again.');
+            return;
+          }
+        }
         try {
           rec.start();
         } catch {
@@ -125,7 +159,13 @@ export function useSpeechRecognition({ onFinal, onError }) {
     [clear, setPending],
   );
 
-  useEffect(() => () => sessionRef.current?.rec.abort(), []);
+  useEffect(
+    () => () => {
+      clearTimeout(sessionRef.current?.commitTimer);
+      sessionRef.current?.rec.abort();
+    },
+    [],
+  );
 
-  return { supported: Boolean(Recognition), active, interim, start, stop };
+  return { supported: Boolean(getRecognition()), active, interim, start, stop };
 }

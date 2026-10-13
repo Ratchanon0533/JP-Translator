@@ -9,6 +9,8 @@ export function ControlDock({
   supported,
   activeSide,
   interim,
+  liveTranslation,
+  liveLang,
   notice,
   onDismissNotice,
   onStart,
@@ -34,17 +36,24 @@ export function ControlDock({
       {notice && (
         <p className={styles.notice} role="alert">
           <span>{notice}</span>
-          <button type="button" className="iconButton" onClick={onDismissNotice} aria-label="Dismiss message">
+          <button type="button" className="iconButton iconButtonPlain" onClick={onDismissNotice} aria-label="Dismiss message">
             <Icon name="close" size={16} />
           </button>
         </p>
       )}
 
-      {/* Words still being recognized (Mirai: `voice_recognizing`). */}
+      {/* Words still being recognized (Mirai: `voice_recognizing`), with a live translation under them. */}
       {listening && (
-        <p className={styles.caption} aria-live="polite">
-          {interim || 'Listening…'}
-        </p>
+        <div className={styles.live}>
+          <p className={styles.caption} aria-live="polite">
+            {interim || 'Listening…'}
+          </p>
+          {interim && liveTranslation && (
+            <p className={styles.liveTranslation} lang={liveLang}>
+              {liveTranslation}
+            </p>
+          )}
+        </div>
       )}
 
       {talk && supported && (

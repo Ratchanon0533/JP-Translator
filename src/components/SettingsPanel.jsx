@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { CLAUDE_MODELS, DEFAULT_OLLAMA_MODEL, listOllamaModels, TRANSLATORS } from '../services/translators/index.js';
+import { DEFAULT_OLLAMA_MODEL, listOllamaModels, TRANSLATORS } from '../services/translators/index.js';
 import { Icon } from './Icon.jsx';
 import { Segmented } from './Segmented.jsx';
 import styles from './SettingsPanel.module.css';
@@ -56,7 +56,7 @@ export function SettingsPanel({ open, settings, onChange, onClose, locked, hasHi
           <h2 id={`${id}-title`} className={styles.title}>
             Settings
           </h2>
-          <button type="button" className="iconButton" onClick={onClose} aria-label="Close settings">
+          <button type="button" className="iconButton iconButtonPlain" onClick={onClose} aria-label="Close settings">
             <Icon name="close" />
           </button>
         </div>
@@ -96,42 +96,6 @@ export function SettingsPanel({ open, settings, onChange, onClose, locked, hasHi
             />
           )}
 
-          {settings.translator === 'claude' && (
-            <>
-              <div className={styles.field}>
-                <label htmlFor={`${id}-key`}>Anthropic API key</label>
-                <input
-                  id={`${id}-key`}
-                  className="input"
-                  type="password"
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder="sk-ant-…"
-                  value={settings.claudeApiKey}
-                  onChange={(event) => onChange({ claudeApiKey: event.target.value.trim() })}
-                />
-              </div>
-              <div className={styles.field}>
-                <label htmlFor={`${id}-model`}>Model</label>
-                <select
-                  id={`${id}-model`}
-                  className="select"
-                  value={settings.claudeModel}
-                  onChange={(event) => onChange({ claudeModel: event.target.value })}
-                >
-                  {CLAUDE_MODELS.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <p className={styles.note}>
-                The key stays in this browser and goes straight to Anthropic. Fine for personal study; a public site
-                should keep it on a server.
-              </p>
-            </>
-          )}
         </section>
 
         <section className={styles.section}>
@@ -142,6 +106,7 @@ export function SettingsPanel({ open, settings, onChange, onClose, locked, hasHi
 
         <section className={styles.section}>
           <span className={styles.label}>History</span>
+          <p className={styles.note}>Cleared every time the page loads. Download the CSV to keep it.</p>
           <div className={styles.actions}>
             <button type="button" className="button" onClick={onExport} disabled={!hasHistory}>
               <Icon name="download" size={16} />

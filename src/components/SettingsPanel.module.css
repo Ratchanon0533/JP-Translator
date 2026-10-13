@@ -7,12 +7,12 @@
   padding: 0;
   border: 0;
   border-left: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--text);
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .drawer::backdrop {
-  background: rgb(0 0 0 / 30%);
+  background: rgb(20 15 10 / 55%);
 }
 
 .drawer[open] {
@@ -66,12 +66,12 @@
 
 .note {
   margin-top: -4px;
-  color: var(--muted);
+  color: var(--ink-soft);
   font-size: 0.8rem;
 }
 
 .warning {
-  color: var(--live);
+  color: var(--bad);
   font-size: 0.8rem;
 }
 
