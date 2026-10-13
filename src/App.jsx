@@ -22,7 +22,7 @@ const DEFAULT_SETTINGS = {
   mode: 'listening', // 'listening' = one-way translation, 'talk' = two people take turns
   lang1: 'ja', // spoken language (Talk mode: person A)
   lang2: 'th', // translated into (Talk mode: person B)
-  translator: 'auto', // 'auto' (Gemma first) | 'gemma' | 'ollama' | 'mymemory'
+  translator: 'auto', // 'auto' (Gemma first) | 'gemma' | 'llama' | 'ollama' | 'mymemory'
   ollamaModel: DEFAULT_OLLAMA_MODEL,
   display: 'both', // 'both' | 'translation' | 'original'
   textSize: 'm',

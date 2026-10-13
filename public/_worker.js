@@ -1,15 +1,29 @@
 // Runs on Cloudflare Pages ("advanced mode": a _worker.js at the root of the
 // uploaded folder). It serves the site as usual, plus one endpoint,
-// POST /api/translate, that translates with Google's Gemma 4 on Workers AI.
+// POST /api/translate, that translates with an AI model on Workers AI:
+// Google's Gemma 4 (main) or Meta's Llama 4 Scout (reserve, if Gemma fails).
 //
-// Workers AI's free plan includes 10,000 Neurons a day (one sentence costs
-// about 3). When they are used up, requests fail until 00:00 UTC (07:00 in
-// Thailand); the free plan has no paid usage, so it can't cost anything.
+// Workers AI's free plan includes 10,000 Neurons a day, shared by both models
+// (one sentence costs about 3 with Gemma, 8 with Llama). When they are used
+// up, requests fail until 00:00 UTC (07:00 in Thailand); the free plan has no
+// paid usage, so it can't cost anything.
 //
 // Setup (once): Pages project → Settings → Bindings → Add → Workers AI,
 // variable name `AI`, then deploy again.
 
-const MODEL = '@cf/google/gemma-4-26b-a4b-it';
+const MODELS = {
+  gemma: {
+    name: 'Gemma',
+    id: '@cf/google/gemma-4-26b-a4b-it',
+    // Ask for no reasoning; the extra room keeps the answer whole if the model reasons anyway.
+    options: { max_completion_tokens: 800, chat_template_kwargs: { enable_thinking: false } },
+  },
+  llama: {
+    name: 'Llama',
+    id: '@cf/meta/llama-4-scout-17b-16e-instruct',
+    options: { max_tokens: 400 },
+  },
+};
 const LANGUAGES = { en: 'English', ja: 'Japanese', th: 'Thai' };
 // Limits so the endpoint can only be used for short translations, not as a general free AI.
 const MAX_TEXT = 500;
@@ -43,7 +57,7 @@ async function translate(request, env, url) {
   if (!env.AI) {
     return json(
       {
-        error: "Gemma on Cloudflare isn't set up yet: add a Workers AI binding named AI to the Pages project.",
+        error: "AI on Cloudflare isn't set up yet: add a Workers AI binding named AI to the Pages project.",
         code: 'not-configured',
       },
       503,
@@ -52,6 +66,8 @@ async function translate(request, env, url) {
 
   const body = await request.json().catch(() => null);
   const { text, from, to } = body ?? {};
+  // Unknown or old model names (e.g. "qwen" from an older page) get the main model.
+  const model = MODELS[body?.model] ?? MODELS.gemma;
   if (typeof text !== 'string' || !text.trim() || text.length > MAX_TEXT) {
     return json({ error: `Text must be 1–${MAX_TEXT} characters.` }, 400);
   }
@@ -63,32 +79,30 @@ async function translate(request, env, url) {
 
   const contextBlock = context.length ? `<context>\n${context.join('\n')}\n</context>\n\n` : '';
   try {
-    const result = await env.AI.run(MODEL, {
+    const result = await env.AI.run(model.id, {
       messages: [
         { role: 'system', content: systemPrompt(LANGUAGES[from], LANGUAGES[to]) },
         { role: 'user', content: `${contextBlock}<utterance>\n${text}\n</utterance>` },
       ],
       temperature: 0.2,
-      // Ask for no reasoning; the extra room keeps the answer whole if the model reasons anyway.
-      max_completion_tokens: 800,
-      chat_template_kwargs: { enable_thinking: false },
+      ...model.options,
     });
-    // Chat models answer in the OpenAI shape; older Workers AI models use `response`.
+    // Newer chat models answer in the OpenAI shape; others (e.g. Llama) use `response`.
     const raw = result?.choices?.[0]?.message?.content ?? result?.response ?? '';
     const translation = String(raw)
       .replace(/<think>[\s\S]*?<\/think>/g, '')
       .trim();
-    if (!translation) return json({ error: 'Gemma returned an empty translation.' }, 502);
+    if (!translation) return json({ error: `${model.name} returned an empty translation.` }, 502);
     return json({ translation });
   } catch (error) {
     const message = String(error?.message ?? error);
     if (/neuron|daily|limit|quota|4006/i.test(message)) {
       return json(
-        { error: "Today's free Gemma allowance on Cloudflare is used up (it resets at 07:00 Thai time).", code: 'quota' },
+        { error: "Today's free AI allowance on Cloudflare is used up (it resets at 07:00 Thai time).", code: 'quota' },
         429,
       );
     }
     // e.g. the model was retired or moved to the paid plan: let the next engine try.
-    return json({ error: `Gemma on Cloudflare failed: ${message}`, code: 'model-unavailable' }, 502);
+    return json({ error: `${model.name} on Cloudflare failed: ${message}`, code: 'model-unavailable' }, 502);
   }
 }

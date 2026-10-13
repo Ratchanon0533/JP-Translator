@@ -43,6 +43,7 @@ once. It is an unlimited, offline backup for when Gemma on Cloudflare isn't avai
              ▼
  translator.translate()                              ← src/services/translators/
      ├── Gemma     – Google's Gemma 4 26B on Cloudflare Workers AI (default, any device) ← public/_worker.js
+     ├── Llama     – Meta's Llama 4 Scout on Cloudflare (reserve, if Gemma is retired or broken)
      ├── Ollama    – Qwen3 8B on this PC (backup, only when the site runs on this PC)
      └── MyMemory  – basic online machine translation (last resort)
              │  "Auto" (default) tries them in that order; an engine that can't be
@@ -100,7 +101,7 @@ A short pause in the middle of a sentence may split it into two lines; that is t
 
 ```
 public/
-  _worker.js                    Cloudflare server part: POST /api/translate → Gemma on Workers AI
+  _worker.js                    Cloudflare server part: POST /api/translate → Gemma (or Llama) on Workers AI
 src/
   App.jsx                       wires speech → translation → transcript
   config/languages.js           language codes for speech and translation
@@ -111,7 +112,7 @@ src/
     usePrefersDark.js           follows the system's light/dark mode
   services/
     retry.js                    exponential backoff
-    translators/                Gemma (Cloudflare), Ollama, MyMemory, engine order ("Auto"), prompt
+    translators/                Gemma + Llama (Cloudflare), Ollama, MyMemory, engine order ("Auto"), prompt
   components/                   Header (language switch), TranscriptList, ControlDock,
                                 SettingsPanel, ConfirmDialog, Segmented, Icon
   utils/                        CSV export, time formatting
@@ -126,6 +127,11 @@ src/
   おはようございます; Qwen3 30B on Cloudflare answered 朝の挨拶 "morning greeting", so it was
   removed). `_worker.js` only accepts short English/Japanese/Thai translations from the site's
   own pages, so others can't spend the free allowance on something else.
+- **Llama on Cloudflare** (Llama 4 Scout, Meta) is the reserve: from a different company than
+  Gemma, officially supports Thai, and only used if Gemma is retired or fails. It shares Gemma's
+  free daily allowance (≈ 8 Neurons a sentence vs ≈ 3), so when the allowance is used up the app
+  skips Cloudflare until 07:00 Thai time instead of asking again. Rejected candidates: GLM-4.7
+  Flash (left Japanese → Thai untranslated in a test), gpt-oss (always reasons first: slow).
 - **Ollama** runs Qwen on your own GPU: free, private, unlimited, but weaker at Thai than Gemma.
   It only works on the PC running Ollama, and *Auto* only uses it as a backup when the site runs
   on this PC. A deployed copy can use it too after `setx OLLAMA_ORIGINS "https://<your-site>"`
