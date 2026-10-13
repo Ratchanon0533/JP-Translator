@@ -202,6 +202,111 @@ select:disabled {
   color: var(--ink-faint);
 }
 
+/* ---------- Dropdowns ----------
+   Add `dropdown` to a <select>. Browsers with customizable selects (Chrome and
+   Edge 135+) then draw the list as a floating card that fades and slides in,
+   with an arrow that flips while open. Other browsers keep their own list. */
+@supports (appearance: base-select) {
+  .dropdown,
+  .dropdown::picker(select) {
+    appearance: base-select;
+  }
+
+  .dropdown {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.2s ease,
+      background-color 0.15s ease;
+  }
+
+  .dropdown:open {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+
+  .dropdown::picker-icon {
+    margin-inline-start: auto;
+    color: var(--ink-faint);
+    transition: rotate 0.25s ease;
+  }
+
+  .dropdown:open::picker-icon {
+    rotate: 180deg;
+  }
+
+  .dropdown::picker(select) {
+    min-inline-size: max(anchor-size(inline), 168px);
+    margin-block: 6px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: 0 12px 32px rgb(30 20 10 / 18%);
+    color: var(--ink);
+    /* Closed state; the open state below is what it animates to. */
+    opacity: 0;
+    translate: 0 -6px;
+    scale: 0.98;
+    transition:
+      opacity 0.18s ease,
+      translate 0.18s ease,
+      scale 0.18s ease,
+      overlay 0.18s allow-discrete,
+      display 0.18s allow-discrete;
+  }
+
+  .dropdown:open::picker(select) {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+
+  @starting-style {
+    .dropdown:open::picker(select) {
+      opacity: 0;
+      translate: 0 -6px;
+      scale: 0.98;
+    }
+  }
+
+  .dropdown option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-weight: 500;
+    transition:
+      background-color 0.12s ease,
+      color 0.12s ease,
+      padding-inline-start 0.15s ease;
+  }
+
+  /* Hovered option slides a little to the right. */
+  .dropdown option:hover,
+  .dropdown option:focus-visible {
+    padding-inline-start: 16px;
+    background: var(--surface-2);
+    outline: none;
+  }
+
+  .dropdown option:checked {
+    background: color-mix(in srgb, var(--accent-soft) 60%, var(--surface));
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .dropdown option::checkmark {
+    order: 1;
+    margin-inline-start: auto;
+    color: var(--accent);
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

@@ -91,7 +91,7 @@ export function SettingsPanel({ open, settings, onChange, onClose, locked, hasHi
             <label htmlFor={`${id}-engine`}>Translation engine</label>
             <select
               id={`${id}-engine`}
-              className="select"
+              className="select dropdown"
               value={settings.translator}
               onChange={(event) => onChange({ translator: event.target.value })}
             >
@@ -194,7 +194,7 @@ function OllamaModelPicker({ id, open, value, onChange }) {
   return (
     <div className={styles.field}>
       <label htmlFor={id}>Model</label>
-      <select id={id} className="select" value={value} onChange={(event) => onChange(event.target.value)}>
+      <select id={id} className="select dropdown" value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((name) => (
           <option key={name} value={name}>
             {models.includes(name) ? name : `${name} (not installed)`}

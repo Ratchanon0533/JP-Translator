@@ -69,7 +69,7 @@ export function Header({ settings, onChange, locked, isDark, onToggleTheme, onOp
 function LanguageSelect({ label, value, onChange, disabled }) {
   return (
     <select
-      className={styles.select}
+      className={`dropdown ${styles.select}`}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       disabled={disabled}

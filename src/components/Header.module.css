@@ -29,7 +29,8 @@
   min-width: 0;
 }
 
-/* Plain text that happens to be a <select>: no box, just the language name. */
+/* Plain text that happens to be a <select>: no box, just the language name
+   (the shared .dropdown style draws its list). */
 .select {
   min-width: 0;
   field-sizing: content;
@@ -41,7 +42,6 @@
   font-weight: 700;
   text-align: center;
   text-overflow: ellipsis;
-  appearance: none;
   cursor: pointer;
 }
 
@@ -49,9 +49,27 @@
   background: var(--surface-2);
 }
 
-.select option {
-  background: var(--surface);
-  color: var(--ink);
+@supports (appearance: base-select) {
+  /* A small arrow next to the name, hidden while languages are locked. */
+  .select::picker-icon {
+    font-size: 0.7em;
+  }
+
+  .select:disabled::picker-icon {
+    display: none;
+  }
+}
+
+/* Browsers without customizable selects: hide the native arrow and box. */
+@supports not (appearance: base-select) {
+  .select {
+    appearance: none;
+  }
+
+  .select option {
+    background: var(--surface);
+    color: var(--ink);
+  }
 }
 
 .actions {
