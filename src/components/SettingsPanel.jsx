@@ -40,7 +40,8 @@ export function SettingsPanel({ open, settings, onChange, onClose, locked, hasHi
   const dialogRef = useRef(null);
   const id = useId();
   const engine = ENGINE_CHOICES.find((choice) => choice.id === settings.translator);
-  const usesOllama = engineChain(settings.translator)[0].id === 'ollama';
+  // Show the Ollama model picker whenever Ollama is one of the engines that may translate.
+  const usesOllama = engineChain(settings.translator).some((engine) => engine.id === 'ollama');
 
   useEffect(() => {
     const dialog = dialogRef.current;

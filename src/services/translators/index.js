@@ -11,8 +11,8 @@ export { TranslationError } from './errors.js';
 // which one is behind translate() — the same idea as Mirai's "vendor strategy"
 // (type_a / type_s) that swaps engines.
 export const TRANSLATORS = {
-  [ollama.id]: ollama,
   [cloudflareGemma.id]: cloudflareGemma,
+  [ollama.id]: ollama,
   [mymemory.id]: mymemory,
 };
 
@@ -22,20 +22,21 @@ export const ENGINE_CHOICES = [
     id: 'auto',
     label: 'Auto (recommended)',
     description:
-      'Uses the best free engine that works here: Ollama when the site runs on this PC, then Gemma on Cloudflare, and MyMemory as a last resort.',
+      'Gemma on Cloudflare first. If it is unavailable: Qwen on this PC (Ollama) when the site runs on this PC, then MyMemory as a last resort.',
   },
   ...Object.values(TRANSLATORS),
 ];
 
-// From best to most basic.
-const ORDER = [ollama.id, cloudflareGemma.id, mymemory.id];
+// Auto's order: Gemma gave the most natural Thai and Japanese in tests; the PC's
+// own Ollama is only worth trying on a page served from this PC.
+const autoOrder = () => [cloudflareGemma.id, ...(isLocalPage() ? [ollama.id] : []), mymemory.id];
 
 // The engines to try for a sentence, in order. When one can't be used right
 // now (not running, not set up, model unavailable, today's free allowance used
-// up), the next one translates instead.
+// up), the next one translates instead. A specific choice goes first, with
+// Auto's engines as its backups.
 export function engineChain(choice) {
-  if (TRANSLATORS[choice]) return ORDER.slice(ORDER.indexOf(choice)).map((id) => TRANSLATORS[id]);
-  // Auto: the PC's own Ollama is only worth trying on a page served from this PC.
-  const ids = isLocalPage() ? ORDER : ORDER.filter((id) => id !== ollama.id);
+  const auto = autoOrder();
+  const ids = TRANSLATORS[choice] ? [choice, ...auto.filter((id) => id !== choice)] : auto;
   return ids.map((id) => TRANSLATORS[id]);
 }

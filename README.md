@@ -16,15 +16,15 @@ npm run dev
 Open <http://localhost:5174> in **Chrome or Edge** (desktop or Android) or **Safari**. Allow the
 microphone when asked. Firefox can't recognize speech, but you can still type.
 
-On your own PC, install [Ollama](https://ollama.com) and run `ollama pull qwen3:8b` once for the
-fastest translations.
+Optional: on your own PC, install [Ollama](https://ollama.com) and run `ollama pull qwen3:8b`
+once. It is an unlimited, offline backup for when Gemma on Cloudflare isn't available.
 
 ## Deploy (Cloudflare Pages)
 
 1. `npm run build`, then upload the `dist` folder in the Pages dashboard (drag and drop works).
    `dist/_worker.js` is the small server part; it comes from `public/_worker.js`.
 2. Once: Pages project → **Settings → Bindings → Add → Workers AI**, variable name `AI`,
-   then upload again. This turns on Gemma (and Qwen as its backup) on Cloudflare for every
+   then upload again. This turns on Gemma on Cloudflare (the default engine) for every
    device, phones too. No separate Worker is needed: `_worker.js` runs inside the Pages project.
 3. Keep the Cloudflare account on the **Workers Free** plan: it has no paid usage, so it can't
    cost anything. When the 10,000 free daily Neurons (≈ thousands of sentences) are used up,
@@ -42,9 +42,8 @@ fastest translations.
              │
              ▼
  translator.translate()                              ← src/services/translators/
-     ├── Ollama    – Qwen3 8B on this PC (fastest, only when the site runs on this PC)
-     ├── Gemma     – Google's Gemma 4 26B on Cloudflare Workers AI (any device) ← public/_worker.js
-     ├── Qwen      – Qwen3 30B on Cloudflare (Gemma's backup; weaker at Thai)
+     ├── Gemma     – Google's Gemma 4 26B on Cloudflare Workers AI (default, any device) ← public/_worker.js
+     ├── Ollama    – Qwen3 8B on this PC (backup, only when the site runs on this PC)
      └── MyMemory  – basic online machine translation (last resort)
              │  "Auto" (default) tries them in that order; an engine that can't be
              │  used right now hands the sentence to the next one
@@ -66,19 +65,19 @@ fastest translations.
 
 ## Why it feels fast in conversation
 
-Translating only takes Qwen about 0.2–0.7 s. Most of the delay used to be **waiting for the
+Translating a sentence takes about 0.5–1 s with Gemma (0.2–0.7 s with the PC's Qwen). Most of the delay used to be **waiting for the
 browser to decide a sentence was finished**, which Chrome does only after a pause of a second or
 more. So, like Mirai (which splits speech instead of waiting for the speaker to stop):
 
 1. **Live translation** (`hooks/useLiveTranslation.js`): while you are still talking, the words
-   so far are translated and shown under the caption. With Ollama (local, unlimited) and, less
-   often, with Qwen on Cloudflare (to save the daily allowance); never with MyMemory.
+   so far are translated and shown under the caption. With Gemma about once a second (to save
+   the daily allowance), with the PC's Ollama more often; never with MyMemory.
 2. **No waiting for Chrome** (`hooks/useSpeechRecognition.js`): when the words haven't changed for
    0.8 s, the app asks Chrome to finish the sentence and keeps listening. If the live translation
    already matches the finished sentence, it is used immediately.
-3. **Streaming**: translations appear word by word as Qwen writes them.
-4. **Warm model**: Qwen is loaded into the GPU when the page opens and when you press the mic,
-   and kept there for an hour.
+3. **Streaming** (Ollama only): translations appear word by word as the PC's Qwen writes them.
+4. **Warm model** (Ollama only, when chosen in Settings): Qwen is loaded into the GPU when the
+   page opens and when you press the mic, and kept there for an hour.
 
 A short pause in the middle of a sentence may split it into two lines; that is the trade-off.
 
@@ -88,7 +87,7 @@ A short pause in the middle of a sentence may split it into two lines; that is t
 |---|---|
 | Next.js static export on S3 + CloudFront | Vite + React single-page app |
 | AudioWorklet → 16 kHz PCM → WebSocket → Mirai's servers | Web Speech API. The browser sends audio to its own speech service (Google, in Chrome) |
-| Server-side translation (cascade, now End2End) | Qwen on this PC (Ollama) or on Cloudflare Workers AI (`_worker.js`), MyMemory as fallback |
+| Server-side translation (cascade, now End2End) | Gemma on Cloudflare Workers AI (`_worker.js`), Qwen on this PC (Ollama) and MyMemory as backups |
 | Splits speech at readable points instead of waiting | Live translation + finishing a sentence after 0.8 s without change |
 | `vendorStrategyAtom` swaps engines (type_a / type_s) | `translators/index.js` registry with the same `translate()` shape |
 | REST retry with exponential backoff and jitter | `services/retry.js` |
@@ -101,7 +100,7 @@ A short pause in the middle of a sentence may split it into two lines; that is t
 
 ```
 public/
-  _worker.js                    Cloudflare server part: POST /api/translate → Qwen on Workers AI
+  _worker.js                    Cloudflare server part: POST /api/translate → Gemma on Workers AI
 src/
   App.jsx                       wires speech → translation → transcript
   config/languages.js           language codes for speech and translation
@@ -112,7 +111,7 @@ src/
     usePrefersDark.js           follows the system's light/dark mode
   services/
     retry.js                    exponential backoff
-    translators/                Ollama, Cloudflare, MyMemory, engine order ("Auto"), shared prompt
+    translators/                Gemma (Cloudflare), Ollama, MyMemory, engine order ("Auto"), prompt
   components/                   Header (language switch), TranscriptList, ControlDock,
                                 SettingsPanel, ConfirmDialog, Segmented, Icon
   utils/                        CSV export, time formatting
@@ -122,16 +121,15 @@ src/
 
 - **Privacy:** in Chrome, speech recognition runs on Google's servers. With Ollama, translation
   stays on your PC; with Cloudflare or MyMemory, the text goes to them.
-- **Ollama** runs Qwen on your own GPU: free, private, unlimited and the fastest. The first
-  sentence after a restart can take up to a minute while the model loads; after that it's well
-  under a second. It only works on the PC running Ollama. A deployed copy can use it too after
-  `setx OLLAMA_ORIGINS "https://<your-site>"` (Settings shows the exact command) — choose
-  *Ollama* in Settings for that, since *Auto* only tries Ollama on localhost.
-- **Gemma on Cloudflare** (Gemma 4 26B, Workers AI free plan) works on every device and gave
-  the most natural Thai and Japanese in tests (e.g. อรุณสวัสดิ์ → おはようございます, where
-  Qwen3 30B answered 朝の挨拶 "morning greeting"). If Gemma ever fails, **Qwen3 30B** takes
-  over; both share the same free daily allowance. `_worker.js` only accepts short English/Japanese/Thai
-  translations from the site's own pages, so others can't spend the allowance on something else.
+- **Gemma on Cloudflare** (Gemma 4 26B, Workers AI free plan) is the default. It works on every
+  device and gave the most natural Thai and Japanese in tests (e.g. อรุณสวัสดิ์ →
+  おはようございます; Qwen3 30B on Cloudflare answered 朝の挨拶 "morning greeting", so it was
+  removed). `_worker.js` only accepts short English/Japanese/Thai translations from the site's
+  own pages, so others can't spend the free allowance on something else.
+- **Ollama** runs Qwen on your own GPU: free, private, unlimited, but weaker at Thai than Gemma.
+  It only works on the PC running Ollama, and *Auto* only uses it as a backup when the site runs
+  on this PC. A deployed copy can use it too after `setx OLLAMA_ORIGINS "https://<your-site>"`
+  (Settings shows the exact command) and choosing *Qwen on this PC* in Settings.
 - **MyMemory** allows roughly 5,000 characters a day for free. Its own "best" answer is often a
   junk crowd-sourced entry (e.g. "hello" → empty, "こんばんは" → a Wikipedia title), so
   `mymemory.js` picks from all candidates itself: right script, exact phrase, majority vote,
@@ -146,4 +144,4 @@ src/
 - A word list: save words from translations to review later
 - Read translations aloud with `speechSynthesis`
 - A volume meter using `AudioContext` + `AnalyserNode` (like Mirai's VolumeBar)
-- A phrase list passed to Qwen as hints for names and jargon
+- A phrase list passed to the AI as hints for names and jargon

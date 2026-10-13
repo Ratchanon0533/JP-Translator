@@ -22,7 +22,7 @@ const DEFAULT_SETTINGS = {
   mode: 'listening', // 'listening' = one-way translation, 'talk' = two people take turns
   lang1: 'ja', // spoken language (Talk mode: person A)
   lang2: 'th', // translated into (Talk mode: person B)
-  translator: 'auto', // 'auto' | 'ollama' | 'cloudflare' (Qwen) | 'gemma' | 'mymemory'
+  translator: 'auto', // 'auto' (Gemma first) | 'gemma' | 'ollama' | 'mymemory'
   ollamaModel: DEFAULT_OLLAMA_MODEL,
   display: 'both', // 'both' | 'translation' | 'original'
   textSize: 'm',
@@ -50,11 +50,9 @@ function withDefaults(stored) {
   delete saved.claudeApiKey;
   delete saved.claudeModel;
   // v5 added "Auto": settings still on the old default (Ollama) move over once.
-  // On this PC Auto still uses Ollama first; on other devices it uses Qwen on Cloudflare.
   if (version < 5 && saved.translator === 'ollama') saved.translator = 'auto';
-  // v6 put Gemma before Qwen on Cloudflare (Qwen got simple Thai wrong): anyone who had
-  // picked Qwen on Cloudflare moves to Auto once, which now uses Gemma first.
-  if (version < 6 && saved.translator === 'cloudflare') saved.translator = 'auto';
+  // Engines that no longer exist (e.g. 'cloudflare', the removed Qwen on Cloudflare)
+  // fall back to the default, Auto, which uses Gemma first.
   if (!ENGINE_CHOICES.some((choice) => choice.id === saved.translator)) delete saved.translator;
   const settings = { ...DEFAULT_SETTINGS, ...saved, version: SETTINGS_VERSION };
 
