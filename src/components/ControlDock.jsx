@@ -9,6 +9,7 @@ export function ControlDock({
   supported,
   activeSide,
   interim,
+  micReady,
   liveTranslation,
   liveLang,
   notice,
@@ -46,7 +47,7 @@ export function ControlDock({
       {listening && (
         <div className={styles.live}>
           <p className={styles.caption} aria-live="polite">
-            {interim || 'Listening…'}
+            {interim || (micReady ? 'Listening…' : 'Waiting for the microphone…')}
           </p>
           {interim && liveTranslation && (
             <p className={styles.liveTranslation} lang={liveLang}>

@@ -4,6 +4,13 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 const getRecognition = () =>
   typeof window === 'undefined' ? undefined : (window.SpeechRecognition ?? window.webkitSpeechRecognition);
 
+// Safari (iPhone, iPad and Mac) needs its own instructions: its speech
+// recognition runs on Apple's Dictation, and without Dictation (or Siri) turned
+// on it fails without ever showing a microphone popup.
+const isSafari = () => /^((?!chrome|chromium|crios|fxios|edg|android).)*safari/i.test(navigator.userAgent);
+const isAppleMobile = () =>
+  /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
 const ERROR_MESSAGES = {
   'not-allowed': 'Microphone access is blocked. Allow the microphone for this site, then press Start again.',
   'service-not-allowed': 'This browser does not allow speech recognition here. Try Chrome or Edge.',
@@ -11,6 +18,42 @@ const ERROR_MESSAGES = {
   network: 'Could not reach the speech recognition service. Check your internet connection.',
   'language-not-supported': 'This browser cannot recognize speech in that language.',
 };
+
+const SAFARI_MESSAGES = {
+  phone: {
+    'service-not-allowed':
+      'Safari needs Dictation for voice input: Settings → General → Keyboard → turn on Enable Dictation (or turn on Siri), then reload this page.',
+    'not-allowed':
+      'Safari blocked the microphone for this site: tap the page menu (aA) in the address bar → Website Settings → Microphone → Allow, then reload.',
+  },
+  mac: {
+    'service-not-allowed':
+      'Safari needs Dictation for voice input: System Settings → Keyboard → turn on Dictation, then reload this page.',
+    'not-allowed':
+      'Safari blocked the microphone for this site: Safari → Settings → Websites → Microphone → set this site to Allow, then reload.',
+  },
+};
+
+function errorMessage(code) {
+  if (isSafari()) {
+    const message = SAFARI_MESSAGES[isAppleMobile() ? 'phone' : 'mac'][code];
+    if (message) return message;
+  }
+  return ERROR_MESSAGES[code] ?? `Speech recognition error: ${code}`;
+}
+
+// Shown when the microphone never starts: no popup, no error, nothing.
+function noStartHint() {
+  if (isSafari()) {
+    return isAppleMobile()
+      ? 'No microphone popup? Check that Dictation is on (Settings → General → Keyboard → Enable Dictation), that this site is allowed in Website Settings → Microphone, and that the page is open in Safari itself, not from the Home Screen.'
+      : 'No microphone popup? Check that Dictation is on (System Settings → Keyboard → Dictation) and that this site is allowed in Safari → Settings → Websites → Microphone.';
+  }
+  return "The microphone hasn't started. If no permission popup appeared, allow the microphone in the browser's site settings and press Start again.";
+}
+
+// How long to wait for the microphone to start before showing what to check.
+const START_TIMEOUT_MS = 6000;
 
 // Browsers end a recognition session after a pause or about a minute, and we
 // restart it. If that happens too often in a short time, something is wrong.
@@ -32,7 +75,8 @@ const COMMIT_AFTER_MS = 800;
 // `meta` is any object passed to start(); it comes back with each final
 // sentence so the caller knows which speaker/direction it belongs to.
 export function useSpeechRecognition({ onFinal, onError }) {
-  const [active, setActive] = useState(null); // { lang, meta } while listening
+  // { lang, meta, ready } while listening; `ready` turns true once the microphone has started.
+  const [active, setActive] = useState(null);
   const [interim, setInterim] = useState('');
   const sessionRef = useRef(null);
   const interimRef = useRef('');
@@ -49,6 +93,7 @@ export function useSpeechRecognition({ onFinal, onError }) {
 
   const clear = useCallback(() => {
     clearTimeout(sessionRef.current?.commitTimer);
+    clearTimeout(sessionRef.current?.startTimer);
     sessionRef.current = null;
     setActive(null);
     setPending('');
@@ -81,8 +126,19 @@ export function useSpeechRecognition({ onFinal, onError }) {
       rec.interimResults = true;
       rec.maxAlternatives = 1;
 
-      const session = { rec, meta, restarts: [], commitTimer: null, committing: false };
+      const session = { rec, meta, restarts: [], commitTimer: null, committing: false, started: false, startTimer: null };
       const isCurrent = () => sessionRef.current === session;
+
+      // The microphone is really listening (after any permission popup was answered).
+      // Any sign of life counts, in case a browser skips one of these events.
+      const markStarted = () => {
+        if (session.started) return;
+        session.started = true;
+        clearTimeout(session.startTimer);
+        if (isCurrent()) setActive((current) => current && { ...current, ready: true });
+      };
+      rec.onstart = markStarted;
+      rec.onaudiostart = markStarted;
 
       const scheduleCommit = (pending) => {
         clearTimeout(session.commitTimer);
@@ -96,6 +152,7 @@ export function useSpeechRecognition({ onFinal, onError }) {
       };
 
       rec.onresult = (event) => {
+        markStarted();
         let pending = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
@@ -114,13 +171,22 @@ export function useSpeechRecognition({ onFinal, onError }) {
 
       rec.onerror = (event) => {
         if (event.error === 'no-speech' || event.error === 'aborted') return;
+        console.warn('Speech recognition error:', event.error, event.message);
         if (isCurrent()) clear();
-        handlersRef.current.onError?.(ERROR_MESSAGES[event.error] ?? `Speech recognition error: ${event.error}`);
+        handlersRef.current.onError?.(errorMessage(event.error));
       };
 
       rec.onend = () => {
         clearTimeout(session.commitTimer);
         if (!isCurrent()) return;
+
+        // Ended without ever starting and without an error: the browser refused
+        // quietly (e.g. Safari with Dictation off). Restarting would only loop.
+        if (!session.started) {
+          clear();
+          handlersRef.current.onError?.(noStartHint());
+          return;
+        }
 
         // Words that never became a final result would otherwise be lost.
         const leftover = interimRef.current.trim();
@@ -140,15 +206,24 @@ export function useSpeechRecognition({ onFinal, onError }) {
             return;
           }
         }
-        try {
-          rec.start();
-        } catch {
-          clear();
-        }
+        // Chrome can start again straight away; Safari sometimes needs a moment.
+        const restart = (canRetry) => {
+          try {
+            rec.start();
+          } catch {
+            if (canRetry) setTimeout(() => isCurrent() && restart(false), 250);
+            else if (isCurrent()) clear();
+          }
+        };
+        restart(true);
       };
 
       sessionRef.current = session;
-      setActive({ lang, meta });
+      setActive({ lang, meta, ready: false });
+      // If the microphone hasn't started after a while (no popup, no error), say what to check.
+      session.startTimer = setTimeout(() => {
+        if (isCurrent() && !session.started) handlersRef.current.onError?.(noStartHint());
+      }, START_TIMEOUT_MS);
       try {
         rec.start();
       } catch (error) {
@@ -162,6 +237,7 @@ export function useSpeechRecognition({ onFinal, onError }) {
   useEffect(
     () => () => {
       clearTimeout(sessionRef.current?.commitTimer);
+      clearTimeout(sessionRef.current?.startTimer);
       sessionRef.current?.rec.abort();
     },
     [],

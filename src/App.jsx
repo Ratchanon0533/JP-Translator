@@ -297,6 +297,7 @@ export default function App() {
         supported={supported}
         activeSide={liveMeta?.side ?? null}
         interim={interim}
+        micReady={active?.ready ?? false}
         liveTranslation={liveTranslation?.translation ?? ''}
         liveLang={liveMeta ? getLanguage(liveMeta.to).speech : undefined}
         notice={notice}
