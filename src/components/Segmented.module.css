@@ -1,0 +1,63 @@
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.label {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.options {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.option {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.option + .option {
+  border-left: 1px solid var(--line);
+}
+
+.option input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.option input:disabled {
+  cursor: not-allowed;
+}
+
+.option span {
+  display: block;
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.option input:checked + span {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.option input:focus-visible + span {
+  outline: 2px solid var(--text);
+  outline-offset: -4px;
+}
+
+.option input:disabled + span {
+  opacity: 0.4;
+}

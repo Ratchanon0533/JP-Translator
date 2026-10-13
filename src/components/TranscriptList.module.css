@@ -1,0 +1,133 @@
+.wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.scroller {
+  height: 100%;
+  padding: 8px 20px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* No cards: each sentence is just text, separated by space. */
+.row {
+  position: relative;
+  padding-right: 32px;
+}
+
+/* Talk mode reads like a conversation: person B's lines sit on the right. */
+.talk .row {
+  max-width: 85%;
+}
+
+.talk .sideB {
+  align-self: flex-end;
+  padding-right: 0;
+  padding-left: 32px;
+  text-align: right;
+}
+
+.original {
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: calc(var(--result-size) * 0.72);
+  overflow-wrap: anywhere;
+}
+
+.main {
+  font-size: var(--result-size);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.pending {
+  color: var(--muted);
+  font-size: calc(var(--result-size) * 0.72);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.error {
+  color: var(--live);
+  font-size: 0.875rem;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* "Translate again": hidden until the line is hovered or focused. */
+.again {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.sideB .again {
+  right: auto;
+  left: 0;
+}
+
+.row:hover .again,
+.again:focus-visible {
+  opacity: 1;
+}
+
+.again:hover {
+  color: var(--text);
+}
+
+@media (hover: none) {
+  .again {
+    opacity: 0.5;
+  }
+}
+
+.empty {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  color: var(--muted);
+  text-align: center;
+}
+
+.latest {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+  transform: translateX(-50%);
+}

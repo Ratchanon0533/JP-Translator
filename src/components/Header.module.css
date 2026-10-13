@@ -1,0 +1,47 @@
+.header {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+}
+
+.mark {
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.langs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Plain text that happens to be a <select>: no box, just the language name. */
+.select {
+  min-width: 0;
+  max-width: 42%;
+  field-sizing: content;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+  text-overflow: ellipsis;
+  appearance: none;
+  cursor: pointer;
+}
+
+.select:hover:not(:disabled) {
+  background: var(--soft);
+}
+
+.select option {
+  background: var(--bg);
+  color: var(--text);
+}
