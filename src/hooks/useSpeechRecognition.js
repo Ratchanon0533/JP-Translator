@@ -19,25 +19,38 @@ const ERROR_MESSAGES = {
   'language-not-supported': 'This browser cannot recognize speech in that language.',
 };
 
+// Safari reports 'service-not-allowed' before it ever asks for the microphone, when
+// (WebKit's SpeechRecognitionPermissionManager): Safari may not use Apple's speech
+// recognition (Privacy & Security setting, or Siri & Dictation off/restricted), or
+// the recognizer isn't available for the spoken language.
 const SAFARI_MESSAGES = {
   phone: {
-    'service-not-allowed':
-      'Safari needs Dictation for voice input: Settings → General → Keyboard → turn on Enable Dictation (or turn on Siri), then reload this page.',
-    'not-allowed':
+    'service-not-allowed': (language) =>
+      `Safari couldn't start speech recognition for ${language}. Check that Settings → Privacy & Security → Speech Recognition → Safari is on, and that Settings → General → Keyboard → Enable Dictation is on, then reload. If another spoken language works, ${language} recognition isn't available on this device.`,
+    'not-allowed': () =>
       'Safari blocked the microphone for this site: tap the page menu (aA) in the address bar → Website Settings → Microphone → Allow, then reload.',
   },
   mac: {
-    'service-not-allowed':
-      'Safari needs Dictation for voice input: System Settings → Keyboard → turn on Dictation, then reload this page.',
-    'not-allowed':
+    'service-not-allowed': (language) =>
+      `Safari couldn't start speech recognition for ${language}. Check that System Settings → Privacy & Security → Speech Recognition → Safari is on, and that System Settings → Keyboard → Dictation is on, then reload.`,
+    'not-allowed': () =>
       'Safari blocked the microphone for this site: Safari → Settings → Websites → Microphone → set this site to Allow, then reload.',
   },
 };
 
-function errorMessage(code) {
+// "th-TH" → "Thai", for messages.
+const languageName = (lang) => {
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language' }).of(lang.split('-')[0]) ?? lang;
+  } catch {
+    return lang;
+  }
+};
+
+function errorMessage(code, lang) {
   if (isSafari()) {
     const message = SAFARI_MESSAGES[isAppleMobile() ? 'phone' : 'mac'][code];
-    if (message) return message;
+    if (message) return message(languageName(lang));
   }
   return ERROR_MESSAGES[code] ?? `Speech recognition error: ${code}`;
 }
@@ -173,7 +186,7 @@ export function useSpeechRecognition({ onFinal, onError }) {
         if (event.error === 'no-speech' || event.error === 'aborted') return;
         console.warn('Speech recognition error:', event.error, event.message);
         if (isCurrent()) clear();
-        handlersRef.current.onError?.(errorMessage(event.error));
+        handlersRef.current.onError?.(errorMessage(event.error, lang));
       };
 
       rec.onend = () => {
