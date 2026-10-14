@@ -11,7 +11,7 @@ import { useLocalStorage } from './hooks/useLocalStorage.js';
 import { usePrefersDark } from './hooks/usePrefersDark.js';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition.js';
 import { withRetry } from './services/retry.js';
-import { DEFAULT_OLLAMA_MODEL, ENGINE_CHOICES, engineChain, TRANSLATORS } from './services/translators/index.js';
+import { ENGINE_CHOICES, engineChain, TRANSLATORS } from './services/translators/index.js';
 import { downloadCsv } from './utils/csv.js';
 
 // Bump when a changed default should also reach settings saved in the browser.
@@ -22,8 +22,7 @@ const DEFAULT_SETTINGS = {
   mode: 'listening', // 'listening' = one-way translation, 'talk' = two people take turns
   lang1: 'ja', // spoken language (Talk mode: person A)
   lang2: 'th', // translated into (Talk mode: person B)
-  translator: 'auto', // 'auto' (Gemma first) | 'gemma' | 'llama' | 'ollama' | 'mymemory'
-  ollamaModel: DEFAULT_OLLAMA_MODEL,
+  translator: 'auto', // 'auto' (Gemma first) | 'gemma' | 'llama' | 'mymemory'
   display: 'both', // 'both' | 'translation' | 'original'
   textSize: 'm',
   theme: 'system',
@@ -31,7 +30,7 @@ const DEFAULT_SETTINGS = {
 
 const TEXT_SIZES = { s: '1.05rem', m: '1.25rem', l: '1.5rem', xl: '1.9rem' };
 const MAX_HISTORY = 300;
-// How many earlier sentences go along as context (the Qwen engines use them; MyMemory ignores them).
+// How many earlier sentences go along as context (the AI engines use them; MyMemory ignores them).
 const CONTEXT_SIZE = 3;
 
 const makeId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -39,8 +38,8 @@ const makeId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.
 function withDefaults(stored) {
   const saved = { ...(stored && typeof stored === 'object' ? stored : {}) };
   const version = saved.version ?? 1;
-  // v2 made Ollama the default: settings still on the old default (MyMemory) move over once.
-  if (version < 2 && saved.translator === 'mymemory') saved.translator = 'ollama';
+  // v2 changed the default away from MyMemory: settings still on that old default move to Auto once.
+  if (version < 2 && saved.translator === 'mymemory') saved.translator = 'auto';
   // v4 made Japanese → Thai the default: settings still on the old default pair move over once.
   if (version < 4 && saved.lang1 === 'en' && saved.lang2 === 'ja') {
     saved.lang1 = 'ja';
@@ -49,11 +48,10 @@ function withDefaults(stored) {
   // v3 removed the Claude engine; also drop its saved API key from the browser.
   delete saved.claudeApiKey;
   delete saved.claudeModel;
-  // v5 added "Auto": settings still on the old default (Ollama) move over once.
-  if (version < 5 && saved.translator === 'ollama') saved.translator = 'auto';
-  // Engines that no longer exist (e.g. 'cloudflare', the removed Qwen on Cloudflare)
-  // fall back to the default, Auto, which uses Gemma first.
+  // Engines that no longer exist (the removed Qwen engines: 'ollama' on this PC and
+  // 'cloudflare') fall back to the default, Auto, which uses Gemma first.
   if (!ENGINE_CHOICES.some((choice) => choice.id === saved.translator)) delete saved.translator;
+  delete saved.ollamaModel;
   const settings = { ...DEFAULT_SETTINGS, ...saved, version: SETTINGS_VERSION };
 
   // Only English, Japanese and Thai are offered; a saved language that was
@@ -110,14 +108,10 @@ export default function App() {
 
   const isDark = settings.theme === 'dark' || (settings.theme === 'system' && prefersDark);
 
-  // Let the first engine warm up (Ollama loads its model into the GPU), and
-  // forget which engine worked last when the choice changes.
+  // Forget which engine worked last when the choice changes.
   useEffect(() => {
-    engineChain(settings.translator)[0].prepare?.(settings);
     setWorkingEngine(null);
-    // Only re-run when the engine or its model changes, not on every setting.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.translator, settings.ollamaModel]);
+  }, [settings.translator]);
 
   const updateSettings = useCallback((patch) => setSettings((current) => ({ ...current, ...patch })), [setSettings]);
 
@@ -127,7 +121,6 @@ export default function App() {
   );
 
   // Step 2 of the cascade: text → translation (Mirai: `text_processing`).
-  // The translation is shown word by word as the engine writes it.
   const translateEntry = useCallback(
     async (entry, context) => {
       const current = settingsRef.current;
@@ -142,7 +135,6 @@ export default function App() {
               to: getLanguage(entry.to),
               context,
               settings: current,
-              onPartial: (partial) => updateEntry(entry.id, { translation: partial }),
             }),
           {
             onRetry: ({ attempt, error }) =>
@@ -150,9 +142,9 @@ export default function App() {
           },
         );
 
-      // Try the engines in order; one that can't be used right now (Ollama on
-      // another device, Cloudflare not set up, a used-up daily allowance) hands
-      // the sentence to the next one.
+      // Try the engines in order; one that can't be used right now (Cloudflare not
+      // set up, a retired model, a used-up daily allowance) hands the sentence to
+      // the next one.
       let firstProblem = null;
       let lastError = null;
       for (const translator of engineChain(current.translator)) {
@@ -255,8 +247,6 @@ export default function App() {
       const [from, to] = side === 'b' ? [current.lang2, current.lang1] : [current.lang1, current.lang2];
       setNotice(null);
       liveLastRef.current = null;
-      // Make sure the model is loaded before the first sentence arrives.
-      engineChain(current.translator)[0].prepare?.(current);
       start(getLanguage(from).speech, { from, to, side });
     },
     [start],

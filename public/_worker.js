@@ -29,7 +29,7 @@ const LANGUAGES = { en: 'English', ja: 'Japanese', th: 'Thai' };
 const MAX_TEXT = 500;
 const MAX_CONTEXT = 3;
 
-// Same instructions as src/services/translators/prompt.js (this file is uploaded as-is, so it can't import it).
+// The instructions given to the model for every sentence.
 const systemPrompt = (from, to) => `You are the translation engine of a live speech translator.
 Translate the text inside <utterance> from ${from} into ${to}.
 The text comes from speech recognition, so punctuation may be missing and a word may be misheard. Translate what the speaker most likely meant, in natural spoken ${to}.

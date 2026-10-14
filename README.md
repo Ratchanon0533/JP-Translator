@@ -16,8 +16,8 @@ npm run dev
 Open <http://localhost:5174> in **Chrome or Edge** (desktop or Android) or **Safari**. Allow the
 microphone when asked. Firefox can't recognize speech, but you can still type.
 
-Optional: on your own PC, install [Ollama](https://ollama.com) and run `ollama pull qwen3:8b`
-once. It is an unlimited, offline backup for when Gemma on Cloudflare isn't available.
+With `npm run dev`, translation uses MyMemory: the AI engines (Gemma and Llama) run in
+`_worker.js`, which only exists once the site is deployed on Cloudflare.
 
 ## Deploy (Cloudflare Pages)
 
@@ -44,7 +44,6 @@ once. It is an unlimited, offline backup for when Gemma on Cloudflare isn't avai
  translator.translate()                              ← src/services/translators/
      ├── Gemma     – Google's Gemma 4 26B on Cloudflare Workers AI (default, any device) ← public/_worker.js
      ├── Llama     – Meta's Llama 4 Scout on Cloudflare (reserve, if Gemma is retired or broken)
-     ├── Ollama    – Qwen3 8B on this PC (backup, only when the site runs on this PC)
      └── MyMemory  – basic online machine translation (last resort)
              │  "Auto" (default) tries them in that order; an engine that can't be
              │  used right now hands the sentence to the next one
@@ -66,19 +65,16 @@ once. It is an unlimited, offline backup for when Gemma on Cloudflare isn't avai
 
 ## Why it feels fast in conversation
 
-Translating a sentence takes about 0.5–1 s with Gemma (0.2–0.7 s with the PC's Qwen). Most of the delay used to be **waiting for the
-browser to decide a sentence was finished**, which Chrome does only after a pause of a second or
-more. So, like Mirai (which splits speech instead of waiting for the speaker to stop):
+Translating a sentence takes about 0.5–1 s with Gemma. Most of the delay used to be **waiting
+for the browser to decide a sentence was finished**, which Chrome does only after a pause of a
+second or more. So, like Mirai (which splits speech instead of waiting for the speaker to stop):
 
 1. **Live translation** (`hooks/useLiveTranslation.js`): while you are still talking, the words
-   so far are translated and shown under the caption. With Gemma about once a second (to save
-   the daily allowance), with the PC's Ollama more often; never with MyMemory.
+   so far are translated and shown under the caption, about once a second (to save the daily
+   allowance); never with MyMemory.
 2. **No waiting for Chrome** (`hooks/useSpeechRecognition.js`): when the words haven't changed for
    0.8 s, the app asks Chrome to finish the sentence and keeps listening. If the live translation
    already matches the finished sentence, it is used immediately.
-3. **Streaming** (Ollama only): translations appear word by word as the PC's Qwen writes them.
-4. **Warm model** (Ollama only, when chosen in Settings): Qwen is loaded into the GPU when the
-   page opens and when you press the mic, and kept there for an hour.
 
 A short pause in the middle of a sentence may split it into two lines; that is the trade-off.
 
@@ -88,7 +84,7 @@ A short pause in the middle of a sentence may split it into two lines; that is t
 |---|---|
 | Next.js static export on S3 + CloudFront | Vite + React single-page app |
 | AudioWorklet → 16 kHz PCM → WebSocket → Mirai's servers | Web Speech API. The browser sends audio to its own speech service (Google, in Chrome) |
-| Server-side translation (cascade, now End2End) | Gemma on Cloudflare Workers AI (`_worker.js`), Qwen on this PC (Ollama) and MyMemory as backups |
+| Server-side translation (cascade, now End2End) | Gemma on Cloudflare Workers AI (`_worker.js`), Llama and MyMemory as backups |
 | Splits speech at readable points instead of waiting | Live translation + finishing a sentence after 0.8 s without change |
 | `vendorStrategyAtom` swaps engines (type_a / type_s) | `translators/index.js` registry with the same `translate()` shape |
 | REST retry with exponential backoff and jitter | `services/retry.js` |
@@ -112,7 +108,7 @@ src/
     usePrefersDark.js           follows the system's light/dark mode
   services/
     retry.js                    exponential backoff
-    translators/                Gemma + Llama (Cloudflare), Ollama, MyMemory, engine order ("Auto"), prompt
+    translators/                Gemma + Llama (Cloudflare), MyMemory, engine order ("Auto")
   components/                   Header (language switch), TranscriptList, ControlDock,
                                 SettingsPanel, ConfirmDialog, Segmented, Icon
   utils/                        CSV export, time formatting
@@ -120,8 +116,8 @@ src/
 
 ## Things to know
 
-- **Privacy:** in Chrome, speech recognition runs on Google's servers. With Ollama, translation
-  stays on your PC; with Cloudflare or MyMemory, the text goes to them.
+- **Privacy:** in Chrome, speech recognition runs on Google's servers, and the text to translate
+  goes to Cloudflare (Gemma, Llama) or MyMemory.
 - **Gemma on Cloudflare** (Gemma 4 26B, Workers AI free plan) is the default. It works on every
   device and gave the most natural Thai and Japanese in tests (e.g. อรุณสวัสดิ์ →
   おはようございます; Qwen3 30B on Cloudflare answered 朝の挨拶 "morning greeting", so it was
@@ -132,10 +128,6 @@ src/
   free daily allowance (≈ 8 Neurons a sentence vs ≈ 3), so when the allowance is used up the app
   skips Cloudflare until 07:00 Thai time instead of asking again. Rejected candidates: GLM-4.7
   Flash (left Japanese → Thai untranslated in a test), gpt-oss (always reasons first: slow).
-- **Ollama** runs Qwen on your own GPU: free, private, unlimited, but weaker at Thai than Gemma.
-  It only works on the PC running Ollama, and *Auto* only uses it as a backup when the site runs
-  on this PC. A deployed copy can use it too after `setx OLLAMA_ORIGINS "https://<your-site>"`
-  (Settings shows the exact command) and choosing *Qwen on this PC* in Settings.
 - **MyMemory** allows roughly 5,000 characters a day for free. Its own "best" answer is often a
   junk crowd-sourced entry (e.g. "hello" → empty, "こんばんは" → a Wikipedia title), so
   `mymemory.js` picks from all candidates itself: right script, exact phrase, majority vote,

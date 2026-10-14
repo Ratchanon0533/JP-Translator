@@ -1,12 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import {
-  DEFAULT_OLLAMA_MODEL,
-  ENGINE_CHOICES,
-  engineChain,
-  isLocalPage,
-  listOllamaModels,
-  ollamaOriginsCommand,
-} from '../services/translators/index.js';
+import { useEffect, useId, useRef } from 'react';
+import { ENGINE_CHOICES } from '../services/translators/index.js';
 import { Icon } from './Icon.jsx';
 import { Segmented } from './Segmented.jsx';
 import styles from './SettingsPanel.module.css';
@@ -40,8 +33,6 @@ export function SettingsPanel({ open, settings, onChange, onClose, locked, hasHi
   const dialogRef = useRef(null);
   const id = useId();
   const engine = ENGINE_CHOICES.find((choice) => choice.id === settings.translator);
-  // Show the Ollama model picker whenever Ollama is one of the engines that may translate.
-  const usesOllama = engineChain(settings.translator).some((engine) => engine.id === 'ollama');
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -86,7 +77,7 @@ export function SettingsPanel({ open, settings, onChange, onClose, locked, hasHi
         </section>
 
         <section className={styles.section}>
-          {/* A dropdown: five choices don't fit side by side. */}
+          {/* A dropdown keeps the full engine names readable. */}
           <div className={styles.field}>
             <label htmlFor={`${id}-engine`}>Translation engine</label>
             <select
@@ -103,15 +94,6 @@ export function SettingsPanel({ open, settings, onChange, onClose, locked, hasHi
             </select>
           </div>
           <p className={styles.note}>{engine?.description}</p>
-
-          {usesOllama && (
-            <OllamaModelPicker
-              id={`${id}-ollama`}
-              open={open}
-              value={settings.ollamaModel}
-              onChange={(ollamaModel) => onChange({ ollamaModel })}
-            />
-          )}
         </section>
 
         <section className={styles.section}>
@@ -136,71 +118,5 @@ export function SettingsPanel({ open, settings, onChange, onClose, locked, hasHi
         </section>
       </div>
     </dialog>
-  );
-}
-
-// Lists the models installed in Ollama each time Settings opens.
-function OllamaModelPicker({ id, open, value, onChange }) {
-  const [models, setModels] = useState(null); // null = checking, 'offline', or a list of names
-
-  useEffect(() => {
-    if (!open) return undefined;
-    let cancelled = false;
-    setModels(null);
-    listOllamaModels()
-      .then((names) => !cancelled && setModels(names))
-      .catch(() => !cancelled && setModels('offline'));
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
-
-  if (models === null) return <p className={styles.note}>Looking for Ollama…</p>;
-  if (models === 'offline') {
-    if (isLocalPage()) {
-      return (
-        <p className={styles.warning}>
-          Ollama isn&apos;t running on this computer. Start the Ollama app, then reopen Settings. Until then,
-          the next engine translates instead.
-        </p>
-      );
-    }
-    // A deployed copy (e.g. on Cloudflare Pages): Ollama refuses pages it doesn't trust.
-    return (
-      <div className={styles.warning}>
-        <p>
-          This page can&apos;t reach Ollama, so the next engine translates instead. Ollama only works on the PC it&apos;s
-          installed on, and only for sites it trusts. To use it here, on that PC:
-        </p>
-        <ol className={styles.steps}>
-          <li>
-            Run <code className={styles.command}>{ollamaOriginsCommand()}</code>
-          </li>
-          <li>Quit Ollama from the taskbar tray and start it again.</li>
-          <li>Reload this page, and choose Allow if the browser asks about apps on this device.</li>
-        </ol>
-      </div>
-    );
-  }
-  if (models.length === 0) {
-    return (
-      <p className={styles.warning}>
-        No models installed yet. Run <code>ollama pull {DEFAULT_OLLAMA_MODEL}</code>, then reopen Settings.
-      </p>
-    );
-  }
-
-  const options = models.includes(value) ? models : [value, ...models];
-  return (
-    <div className={styles.field}>
-      <label htmlFor={id}>Model</label>
-      <select id={id} className="select dropdown" value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((name) => (
-          <option key={name} value={name}>
-            {models.includes(name) ? name : `${name} (not installed)`}
-          </option>
-        ))}
-      </select>
-    </div>
   );
 }

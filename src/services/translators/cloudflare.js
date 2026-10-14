@@ -21,7 +21,7 @@ function cloudflareEngine({ id, model, name, ...details }) {
     id,
     ...details,
     live: true,
-    // Live translation spends the daily allowance, so it runs less often than with Ollama.
+    // Live translation spends the daily allowance, so it runs about once a second at most.
     liveGapMs: 1200,
 
     async translate({ text, from, to, context = [], signal }) {

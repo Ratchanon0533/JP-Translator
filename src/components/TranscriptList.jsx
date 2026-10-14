@@ -67,13 +67,7 @@ function Row({ entry, display, onRetranslate }) {
         </p>
       )}
 
-      {/* While the engine is still writing, show the words it has so far. */}
-      {showTranslation && busy && entry.translation && (
-        <p className={styles.main} lang={to.speech}>
-          {entry.translation}
-        </p>
-      )}
-      {showTranslation && busy && !entry.translation && (
+      {showTranslation && busy && (
         <p className={styles.pending}>{entry.state === 'retrying' ? 'Retrying…' : 'Translating…'}</p>
       )}
       {showTranslation && failed && (
