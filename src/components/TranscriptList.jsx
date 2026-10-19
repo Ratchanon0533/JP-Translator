@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { getLanguage } from '../config/languages.js';
 import { formatTime } from '../utils/format.js';
 import { Icon } from './Icon.jsx';
+import { Dots } from './LiveText.jsx';
 import styles from './TranscriptList.module.css';
 
 export function TranscriptList({ entries, display, talk, emptyText, onRetranslate }) {
@@ -67,8 +68,14 @@ function Row({ entry, display, onRetranslate }) {
         </p>
       )}
 
+      {/* While the final translation comes, the one made during speech (or the
+          previous one) is shown faded, so there's always something to read. */}
       {showTranslation && busy && (
-        <p className={styles.pending}>{entry.state === 'retrying' ? 'Retrying…' : 'Translating…'}</p>
+        <p className={`${styles.main} ${styles.pending}`} lang={to.speech}>
+          {entry.draft && <>{entry.draft} </>}
+          <Dots label={entry.state === 'retrying' ? 'Retrying' : 'Translating'} />
+          {entry.state === 'retrying' && <span className={styles.note}> retrying</span>}
+        </p>
       )}
       {showTranslation && failed && (
         <p className={styles.error}>
@@ -79,7 +86,7 @@ function Row({ entry, display, onRetranslate }) {
         </p>
       )}
       {showTranslation && !busy && !failed && (
-        <p className={styles.main} lang={to.speech}>
+        <p className={`${styles.main} ${styles.arrived}`} lang={to.speech}>
           {entry.translation}
         </p>
       )}

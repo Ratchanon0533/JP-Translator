@@ -21,29 +21,55 @@
   color: inherit;
 }
 
+/* The sentence being spoken, above the input (Mirai shows it the same way). */
 .live {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0 4px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
 }
 
+.live > :first-child {
+  margin-top: 3px;
+}
+
+.liveText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* column-reverse starts the scroll at the end, so the newest words stay in view. */
 .caption,
 .liveTranslation {
-  max-height: 4.5em;
+  display: flex;
+  flex-direction: column-reverse;
   overflow-y: auto;
   overflow-wrap: anywhere;
+  scrollbar-width: none;
 }
 
 .caption {
-  color: var(--ink-soft);
+  max-height: 4.8em;
+  color: var(--ink);
+  font-size: 1.05rem;
+  line-height: 1.6;
 }
 
 /* Provisional: replaced by the finished translation once the sentence ends. */
 .liveTranslation {
-  color: var(--ink);
-  font-size: 1.05rem;
-  font-weight: 500;
+  max-height: 4.2em;
+  color: var(--accent);
+  line-height: 1.4;
+}
+
+.status {
+  color: var(--ink-faint);
 }
 
 .talk {

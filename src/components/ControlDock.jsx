@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Icon } from './Icon.jsx';
+import { Dots, GrowingText, VoiceBars } from './LiveText.jsx';
 import styles from './ControlDock.module.css';
 
 export function ControlDock({
@@ -9,8 +10,11 @@ export function ControlDock({
   supported,
   activeSide,
   interim,
+  captionLang,
   micReady,
+  liveEnabled,
   liveTranslation,
+  liveCaughtUp,
   liveLang,
   notice,
   onDismissNotice,
@@ -46,12 +50,32 @@ export function ControlDock({
       {/* Words still being recognized (Mirai: `voice_recognizing`), with a live translation under them. */}
       {listening && (
         <div className={styles.live}>
-          <p className={styles.caption} aria-live="polite">
-            {interim || (micReady ? 'Listening…' : 'Waiting for the microphone…')}
-          </p>
-          {interim && liveTranslation && (
-            <p className={styles.liveTranslation} lang={liveLang}>
-              {liveTranslation}
+          <VoiceBars speaking={Boolean(interim)} />
+          {interim ? (
+            <div className={styles.liveText}>
+              {/* column-reverse keeps the newest words in view when the text gets long */}
+              <p className={styles.caption} lang={captionLang}>
+                <span>
+                  <GrowingText text={interim} />
+                </span>
+              </p>
+              {liveEnabled && (
+                <p className={styles.liveTranslation} lang={liveLang}>
+                  <span>
+                    {liveTranslation && <GrowingText text={liveTranslation} />}
+                    {!liveCaughtUp && (
+                      <>
+                        {liveTranslation && ' '}
+                        <Dots label="Translating" />
+                      </>
+                    )}
+                  </span>
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className={styles.status} aria-live="polite">
+              {micReady ? 'Listening…' : 'Waiting for the microphone…'}
             </p>
           )}
         </div>

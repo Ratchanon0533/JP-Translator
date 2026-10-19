@@ -10,6 +10,12 @@ const getRecognition = () =>
 const isSafari = () => /^((?!chrome|chromium|crios|fxios|edg|android).)*safari/i.test(navigator.userAgent);
 const isAppleMobile = () =>
   /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+// Chrome on Android has its own quirks: in continuous mode it sends the same
+// sentence two or three times (and again with more words), and it marks words
+// that are still changing as "final", with a confidence of 0.
+const isAndroid = () => /android/i.test(navigator.userAgent);
+
+const normalize = (text) => text.trim().replace(/\s+/g, ' ');
 
 const ERROR_MESSAGES = {
   'not-allowed': 'Microphone access is blocked. Allow the microphone for this site, then press Start again.',
@@ -69,9 +75,15 @@ function noStartHint() {
 const START_TIMEOUT_MS = 6000;
 
 // Browsers end a recognition session after a pause or about a minute, and we
-// restart it. If that happens too often in a short time, something is wrong.
+// restart it. A session that ends almost at once without hearing anything,
+// again and again in a short time, means something is wrong.
+const QUICK_END_MS = 2000;
 const MAX_RESTARTS = 5;
 const RESTART_WINDOW_MS = 10_000;
+
+// A sentence that repeats the one just finished (or part of it) this soon is a
+// duplicate from the browser, not something said twice.
+const REPEAT_WINDOW_MS = 3000;
 
 // Chrome only marks a sentence "final" after a pause of a second or more, and
 // in quick conversation it can hold it much longer. When the words haven't
@@ -87,16 +99,18 @@ const COMMIT_AFTER_MS = 800;
 //
 // `meta` is any object passed to start(); it comes back with each final
 // sentence so the caller knows which speaker/direction it belongs to.
-export function useSpeechRecognition({ onFinal, onError }) {
+// onFinal(text, meta) returns an id for the sentence; when the browser sends the
+// same sentence again with more words, onRevise(id, text, meta) replaces it.
+export function useSpeechRecognition({ onFinal, onRevise, onError }) {
   // { lang, meta, ready } while listening; `ready` turns true once the microphone has started.
   const [active, setActive] = useState(null);
   const [interim, setInterim] = useState('');
   const sessionRef = useRef(null);
   const interimRef = useRef('');
-  const handlersRef = useRef({ onFinal, onError });
+  const handlersRef = useRef({ onFinal, onRevise, onError });
 
   useLayoutEffect(() => {
-    handlersRef.current = { onFinal, onError };
+    handlersRef.current = { onFinal, onRevise, onError };
   });
 
   const setPending = useCallback((text) => {
@@ -114,8 +128,10 @@ export function useSpeechRecognition({ onFinal, onError }) {
 
   const stop = useCallback(() => {
     const session = sessionRef.current;
+    // stop() (unlike abort()) still delivers the sentence that was in progress;
+    // these words are kept in case it doesn't (see onend).
+    if (session) session.stoppedWith = interimRef.current;
     clear();
-    // stop() (unlike abort()) still delivers the sentence that was in progress.
     session?.rec.stop();
   }, [clear]);
 
@@ -133,14 +149,54 @@ export function useSpeechRecognition({ onFinal, onError }) {
         previous.rec.abort();
       }
 
+      const android = isAndroid();
       const rec = new Recognition();
       rec.lang = lang;
-      rec.continuous = true;
+      // Android: one sentence per recognition session (its continuous mode repeats
+      // results); onend starts the next one straight away, so listening goes on.
+      rec.continuous = !android;
       rec.interimResults = true;
       rec.maxAlternatives = 1;
 
-      const session = { rec, meta, restarts: [], commitTimer: null, committing: false, started: false, startTimer: null };
+      const session = {
+        rec,
+        meta,
+        restarts: [],
+        commitTimer: null,
+        committing: false,
+        started: false,
+        startTimer: null,
+        // One recognition session, from start() to onend: how many of its results
+        // were already used, whether it heard anything, when it began.
+        run: null,
+        // The last sentence handed over: { id, text, at }.
+        last: null,
+        // Words still unfinished when the user pressed Stop.
+        stoppedWith: '',
+      };
       const isCurrent = () => sessionRef.current === session;
+      const beginRun = () => {
+        session.run = { used: 0, heard: false, startedAt: Date.now() };
+      };
+
+      // Hands a finished sentence over once. The browser may send it again (or
+      // part of it); if it comes back with more words, the earlier line is replaced.
+      const finish = (raw) => {
+        const text = normalize(raw);
+        session.stoppedWith = '';
+        if (!text) return;
+        const last = session.last;
+        if (last && Date.now() - last.at < REPEAT_WINDOW_MS) {
+          if (last.text.includes(text)) return;
+          if (text.startsWith(last.text) && handlersRef.current.onRevise) {
+            handlersRef.current.onRevise(last.id, text, meta);
+            session.last = { ...last, text, at: Date.now() };
+            return;
+          }
+        }
+        const id = handlersRef.current.onFinal(text, meta);
+        session.last = { id, text, at: Date.now() };
+      };
 
       // The microphone is really listening (after any permission popup was answered).
       // Any sign of life counts, in case a browser skips one of these events.
@@ -155,7 +211,9 @@ export function useSpeechRecognition({ onFinal, onError }) {
 
       const scheduleCommit = (pending) => {
         clearTimeout(session.commitTimer);
-        if (!pending.trim()) return;
+        // Android ends the session by itself at each pause already, and every
+        // restart plays its beep, so it isn't stopped any earlier there.
+        if (android || !pending.trim()) return;
         session.commitTimer = setTimeout(() => {
           if (!isCurrent() || interimRef.current !== pending) return;
           session.committing = true;
@@ -166,17 +224,26 @@ export function useSpeechRecognition({ onFinal, onError }) {
 
       rec.onresult = (event) => {
         markStarted();
+        const run = session.run;
+        run.heard = true;
+        // The list holds every result of this session. Results already used are
+        // skipped by position: Android's `resultIndex` can't be trusted, and it
+        // sends finished results again.
         let pending = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
+        for (let i = run.used; i < event.results.length; i++) {
           const result = event.results[i];
-          const text = result[0].transcript;
-          if (result.isFinal) {
-            if (text.trim()) handlersRef.current.onFinal(text.trim(), meta);
+          const { transcript, confidence } = result[0];
+          const final = result.isFinal && !(android && confidence === 0);
+          if (final && !pending) {
+            finish(transcript);
+            run.used = i + 1;
           } else {
-            pending += text;
+            pending += transcript;
           }
         }
-        if (isCurrent()) {
+        // The same words sent again (common in noise) don't count as a change,
+        // so they don't hold back finishing the sentence.
+        if (isCurrent() && pending !== interimRef.current) {
           setPending(pending);
           scheduleCommit(pending);
         }
@@ -191,7 +258,11 @@ export function useSpeechRecognition({ onFinal, onError }) {
 
       rec.onend = () => {
         clearTimeout(session.commitTimer);
-        if (!isCurrent()) return;
+        if (!isCurrent()) {
+          // Stopped by the user: keep the last words if no final result came for them.
+          if (session.stoppedWith) finish(session.stoppedWith);
+          return;
+        }
 
         // Ended without ever starting and without an error: the browser refused
         // quietly (e.g. Safari with Dictation off). Restarting would only loop.
@@ -202,14 +273,15 @@ export function useSpeechRecognition({ onFinal, onError }) {
         }
 
         // Words that never became a final result would otherwise be lost.
-        const leftover = interimRef.current.trim();
-        if (leftover) handlersRef.current.onFinal(leftover, meta);
+        const leftover = interimRef.current;
         setPending('');
+        finish(leftover);
 
-        if (session.committing) {
-          // We ended it on purpose to finish a sentence; that isn't the browser giving up.
-          session.committing = false;
-        } else {
+        const run = session.run;
+        const endedAtOnce = !session.committing && !run.heard && Date.now() - run.startedAt < QUICK_END_MS;
+        // Ended by us to finish a sentence, or after hearing something: that's normal.
+        session.committing = false;
+        if (endedAtOnce) {
           const now = Date.now();
           session.restarts = session.restarts.filter((time) => now - time < RESTART_WINDOW_MS);
           session.restarts.push(now);
@@ -222,6 +294,7 @@ export function useSpeechRecognition({ onFinal, onError }) {
         // Chrome can start again straight away; Safari sometimes needs a moment.
         const restart = (canRetry) => {
           try {
+            beginRun();
             rec.start();
           } catch {
             if (canRetry) setTimeout(() => isCurrent() && restart(false), 250);
@@ -232,6 +305,7 @@ export function useSpeechRecognition({ onFinal, onError }) {
       };
 
       sessionRef.current = session;
+      beginRun();
       setActive({ lang, meta, ready: false });
       // If the microphone hasn't started after a while (no popup, no error), say what to check.
       session.startTimer = setTimeout(() => {

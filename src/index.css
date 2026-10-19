@@ -313,12 +313,6 @@ select:disabled {
   }
 }
 
-@keyframes pulse {
-  50% {
-    opacity: 0.3;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

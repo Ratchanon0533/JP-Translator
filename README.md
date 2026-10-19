@@ -70,13 +70,20 @@ for the browser to decide a sentence was finished**, which Chrome does only afte
 second or more. So, like Mirai (which splits speech instead of waiting for the speaker to stop):
 
 1. **Live translation** (`hooks/useLiveTranslation.js`): while you are still talking, the words
-   so far are translated and shown under the caption, about once a second (to save the daily
-   allowance); never with MyMemory.
+   so far appear above the input as they are heard (new words fade in), and are translated and
+   shown under them, about once a second (to save the daily allowance); never with MyMemory.
 2. **No waiting for Chrome** (`hooks/useSpeechRecognition.js`): when the words haven't changed for
    0.8 s, the app asks Chrome to finish the sentence and keeps listening. If the live translation
-   already matches the finished sentence, it is used immediately.
+   already matches the finished sentence, it is used immediately; otherwise it is shown faded in
+   the transcript until the final translation arrives.
 
 A short pause in the middle of a sentence may split it into two lines; that is the trade-off.
+
+**Android:** Chrome there ends speech recognition at every pause by itself, plays a beep each
+time it starts listening again (Android's sound: web pages can't turn it off), and sends the same
+sentence two or three times. So on Android the app doesn't finish sentences early (that would
+only add beeps), uses one recognition session per sentence, and drops repeated sentences; one that
+comes back with more words replaces the earlier line.
 
 ## Compared with Mirai's Listening Assistant
 
@@ -110,7 +117,8 @@ src/
     retry.js                    exponential backoff
     translators/                Gemma + Llama (Cloudflare), MyMemory, engine order ("Auto")
   components/                   Header (language switch), TranscriptList, ControlDock,
-                                SettingsPanel, ConfirmDialog, Segmented, Icon
+                                LiveText (words appearing, dots), SettingsPanel,
+                                ConfirmDialog, Segmented, Icon
   utils/                        CSV export, time formatting
 ```
 

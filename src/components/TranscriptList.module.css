@@ -20,10 +20,11 @@
   list-style: none;
 }
 
-/* No cards: each sentence is just text, separated by space. */
+/* No cards: each sentence is just text, separated by space. A new line slides in. */
 .row {
   position: relative;
   padding-right: 32px;
+  animation: rise 0.25s ease-out;
 }
 
 /* Talk mode reads like a conversation: person B's lines sit on the right. */
@@ -51,10 +52,30 @@
   overflow-wrap: anywhere;
 }
 
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
 .pending {
   color: var(--ink-faint);
-  font-size: calc(var(--result-size) * 0.72);
-  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.note {
+  font-size: 0.75em;
+}
+
+/* The finished translation replaces the faded draft. */
+.arrived {
+  animation: arrive 0.3s ease-out;
+}
+
+@keyframes arrive {
+  from {
+    opacity: 0.4;
+  }
 }
 
 .error {

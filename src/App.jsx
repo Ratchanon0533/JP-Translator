@@ -120,11 +120,20 @@ export default function App() {
     [setEntries],
   );
 
+  // The latest translation request for each line; an older one that finishes later is ignored.
+  const jobsRef = useRef(new Map());
+
   // Step 2 of the cascade: text → translation (Mirai: `text_processing`).
   const translateEntry = useCallback(
     async (entry, context) => {
       const current = settingsRef.current;
-      updateEntry(entry.id, { state: 'translating', translation: '', error: null });
+      const job = (jobsRef.current.get(entry.id) ?? 0) + 1;
+      jobsRef.current.set(entry.id, job);
+      const isLatest = () => jobsRef.current.get(entry.id) === job;
+      const update = (patch) => isLatest() && updateEntry(entry.id, patch);
+
+      // Until the new translation arrives, show the one there is (faded).
+      update({ state: 'translating', draft: entry.translation || entry.draft || null, translation: '', error: null });
 
       const run = (translator) =>
         withRetry(
@@ -138,7 +147,7 @@ export default function App() {
             }),
           {
             onRetry: ({ attempt, error }) =>
-              updateEntry(entry.id, { state: 'retrying', attempt, translation: '', error: error.message }),
+              update({ state: 'retrying', attempt, translation: '', error: error.message }),
           },
         );
 
@@ -148,9 +157,11 @@ export default function App() {
       let firstProblem = null;
       let lastError = null;
       for (const translator of engineChain(current.translator)) {
+        if (!isLatest()) return;
         try {
           const translation = await run(translator);
-          updateEntry(entry.id, { state: 'done', translation, engine: translator.id, error: null });
+          if (!isLatest()) return;
+          update({ state: 'done', translation, draft: null, engine: translator.id, error: null });
           setWorkingEngine(translator.id);
           if (firstProblem && !fallbackNoticeShownRef.current) {
             fallbackNoticeShownRef.current = true;
@@ -164,7 +175,7 @@ export default function App() {
           firstProblem ??= error;
         }
       }
-      updateEntry(entry.id, { state: 'error', error: lastError?.message ?? String(lastError) });
+      update({ state: 'error', draft: null, error: lastError?.message ?? String(lastError) });
     },
     [updateEntry],
   );
@@ -191,11 +202,29 @@ export default function App() {
         setEntries((list) =>
           [...list, { ...entry, state: 'done', translation: live.translation, engine: live.engine }].slice(-MAX_HISTORY),
         );
-        return;
+        return entry.id;
       }
 
+      // Otherwise the live translation of the first words is a draft until the real one comes.
+      if (live && text.startsWith(live.text.slice(0, 2))) entry.draft = live.translation;
       setEntries((list) => [...list, entry].slice(-MAX_HISTORY));
       translateEntry(entry, context);
+      return entry.id;
+    },
+    [setEntries, translateEntry],
+  );
+
+  // The browser sent a sentence again with more words: the line gets the longer text.
+  const reviseUtterance = useCallback(
+    (id, text, { from, to }) => {
+      const list = entriesRef.current;
+      const index = list.findIndex((entry) => entry.id === id);
+      const before = index === -1 ? list : list.slice(0, index);
+      setEntries((all) => all.map((entry) => (entry.id === id ? { ...entry, source: text } : entry)));
+      translateEntry(
+        { ...list[index], id, source: text, from, to },
+        before.slice(-CONTEXT_SIZE).map((entry) => entry.source),
+      );
     },
     [setEntries, translateEntry],
   );
@@ -215,6 +244,7 @@ export default function App() {
   // Step 1 of the cascade: speech → text.
   const { supported, active, interim, start, stop } = useSpeechRecognition({
     onFinal: (text, { from, to, side }) => addUtterance(text, from, to, side),
+    onRevise: reviseUtterance,
     onError: setNotice,
   });
 
@@ -223,8 +253,9 @@ export default function App() {
   // (MyMemory never does this: its small daily limit is kept for finished sentences.)
   const liveEngine = TRANSLATORS[workingEngine] ?? engineChain(settings.translator)[0];
   const liveMeta = active?.meta;
+  const liveEnabled = Boolean(liveEngine.live && liveMeta);
   const liveTranslation = useLiveTranslation({
-    enabled: Boolean(liveEngine.live && liveMeta),
+    enabled: liveEnabled,
     text: interim,
     lastRef: liveLastRef,
     minGapMs: liveEngine.liveGapMs,
@@ -287,8 +318,11 @@ export default function App() {
         supported={supported}
         activeSide={liveMeta?.side ?? null}
         interim={interim}
+        captionLang={liveMeta ? getLanguage(liveMeta.from).speech : undefined}
         micReady={active?.ready ?? false}
+        liveEnabled={liveEnabled}
         liveTranslation={liveTranslation?.translation ?? ''}
+        liveCaughtUp={Boolean(liveTranslation) && sameText(liveTranslation.text, interim)}
         liveLang={liveMeta ? getLanguage(liveMeta.to).speech : undefined}
         notice={notice}
         onDismissNotice={() => setNotice(null)}
