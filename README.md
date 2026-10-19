@@ -77,7 +77,13 @@ second or more. So, like Mirai (which splits speech instead of waiting for the s
    already matches the finished sentence, it is used immediately; otherwise it is shown faded in
    the transcript until the final translation arrives.
 
-A short pause in the middle of a sentence may split it into two lines; that is the trade-off.
+3. **Sentences carry on across short pauses** (`utils/sentence.js`): finishing early also ends a
+   sentence at a thinking pause ("Japan and Thailand is" … "should never …"). So when the speaker
+   goes on soon after, the new words join the same line, which is translated again as a whole.
+   How soon depends on the last words: up to 4 s after an ending that leaves the sentence open
+   ("is", "and", "in"; は, て, から; ที่, จะ, และ), up to 2 s after other endings, and never after
+   one that closes it (? ; です, ますか; ครับ, ค่ะ). A line stops growing at about 200 characters
+   (90 in Japanese).
 
 **Android:** Chrome there ends speech recognition at every pause by itself, plays a beep each
 time it starts listening again (Android's sound: web pages can't turn it off), and sends the same
@@ -119,7 +125,7 @@ src/
   components/                   Header (language switch), TranscriptList, ControlDock,
                                 LiveText (words appearing, dots), SettingsPanel,
                                 ConfirmDialog, Segmented, Icon
-  utils/                        CSV export, time formatting
+  utils/                        CSV export, time formatting, sentence endings (carry on a line)
 ```
 
 ## Things to know

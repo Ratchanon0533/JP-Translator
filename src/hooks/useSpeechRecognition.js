@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { joinText, maxLineLength, sentenceEnd } from '../utils/sentence.js';
 
 // Looked up each time rather than once, so a test can stand in a fake recognizer.
 const getRecognition = () =>
@@ -91,31 +92,40 @@ const REPEAT_WINDOW_MS = 3000;
 // (Mirai likewise splits speech instead of waiting for the speaker to stop).
 const COMMIT_AFTER_MS = 800;
 
+// A short pause in the middle of a sentence ends it too, so when the speaker
+// goes on within this long, the new words carry on the same line and the line
+// is translated again as a whole. How long depends on whether the line so far
+// looks like a whole sentence (see utils/sentence.js).
+const CARRY_ON_MS = { unfinished: 4000, unknown: 2000, finished: 0 };
+
 // Wraps the browser's Web Speech API. This replaces Mirai's whole audio
 // pipeline (AudioWorklet → 16 kHz PCM → WebSocket → speech server): the
 // browser records the mic, sends it to its own speech service and hands back
 //   - interim text while someone is still talking (Mirai: `voice_recognizing`)
 //   - final text once they pause                    (Mirai: `voice_recognized`)
 //
-// `meta` is any object passed to start(); it comes back with each final
-// sentence so the caller knows which speaker/direction it belongs to.
-// onFinal(text, meta) returns an id for the sentence; when the browser sends the
-// same sentence again with more words, onRevise(id, text, meta) replaces it.
+// `meta` is any object passed to start(); it comes back with each line so the
+// caller knows which speaker/direction it belongs to. onFinal(text, meta)
+// starts a new line and returns its id; onRevise(id, text, meta) gives that
+// line new text (more words after a pause, or the browser sending the
+// sentence again with more words).
 export function useSpeechRecognition({ onFinal, onRevise, onError }) {
   // { lang, meta, ready } while listening; `ready` turns true once the microphone has started.
   const [active, setActive] = useState(null);
+  // What is being said: the words not final yet, after the line they carry on (if any).
   const [interim, setInterim] = useState('');
   const sessionRef = useRef(null);
-  const interimRef = useRef('');
+  // The words not final yet, on their own.
+  const pendingRef = useRef('');
   const handlersRef = useRef({ onFinal, onRevise, onError });
 
   useLayoutEffect(() => {
     handlersRef.current = { onFinal, onRevise, onError };
   });
 
-  const setPending = useCallback((text) => {
-    interimRef.current = text;
-    setInterim(text);
+  const setPending = useCallback((text, shown = text) => {
+    pendingRef.current = text;
+    setInterim(shown);
   }, []);
 
   const clear = useCallback(() => {
@@ -130,7 +140,7 @@ export function useSpeechRecognition({ onFinal, onRevise, onError }) {
     const session = sessionRef.current;
     // stop() (unlike abort()) still delivers the sentence that was in progress;
     // these words are kept in case it doesn't (see onend).
-    if (session) session.stoppedWith = interimRef.current;
+    if (session) session.stoppedWith = pendingRef.current;
     clear();
     session?.rec.stop();
   }, [clear]);
@@ -143,9 +153,9 @@ export function useSpeechRecognition({ onFinal, onRevise, onError }) {
       const previous = sessionRef.current;
       if (previous) {
         // Switching speakers mid-sentence: keep what was heard so far.
-        const pending = interimRef.current.trim();
-        if (pending) handlersRef.current.onFinal(pending, previous.meta);
+        const pending = pendingRef.current;
         clear();
+        previous.finish(pending);
         previous.rec.abort();
       }
 
@@ -169,8 +179,15 @@ export function useSpeechRecognition({ onFinal, onRevise, onError }) {
         // One recognition session, from start() to onend: how many of its results
         // were already used, whether it heard anything, when it began.
         run: null,
-        // The last sentence handed over: { id, text, at }.
+        // The line last handed over: { id, line, before, piece, endedAt, at }.
+        // `piece` is the part added last (line = before + piece), `endedAt` when
+        // its last words were heard, `at` when it was handed over.
         last: null,
+        // The words being said now: when they began, when they last changed,
+        // and the line they carry on (or null for a new line).
+        heardFrom: null,
+        heardAt: 0,
+        carriesOn: null,
         // Words still unfinished when the user pressed Stop.
         stoppedWith: '',
       };
@@ -179,24 +196,51 @@ export function useSpeechRecognition({ onFinal, onRevise, onError }) {
         session.run = { used: 0, heard: false, startedAt: Date.now() };
       };
 
-      // Hands a finished sentence over once. The browser may send it again (or
-      // part of it); if it comes back with more words, the earlier line is replaced.
+      // Speech that begins at `time`: does it carry on the last line?
+      const lineToCarryOn = (time) => {
+        const last = session.last;
+        if (!last || last.line.length >= maxLineLength(lang)) return null;
+        return time - last.endedAt < CARRY_ON_MS[sentenceEnd(last.line, lang)] ? last : null;
+      };
+
+      const show = (pending) => {
+        const line = session.carriesOn?.line;
+        setPending(pending, pending && line ? joinText(line, pending, lang) : pending);
+      };
+
+      // Hands finished words over once: as a new line, or added to the last one.
+      // The browser may send them again (or part of them), or again with more
+      // words; then the last part of the line is replaced.
       const finish = (raw) => {
         const text = normalize(raw);
+        const now = Date.now();
+        const endedAt = session.heardFrom ? session.heardAt : now;
+        const carriesOn = session.heardFrom ? session.carriesOn : lineToCarryOn(now);
+        session.heardFrom = null;
+        session.carriesOn = null;
         session.stoppedWith = '';
         if (!text) return;
+
         const last = session.last;
-        if (last && Date.now() - last.at < REPEAT_WINDOW_MS) {
-          if (last.text.includes(text)) return;
-          if (text.startsWith(last.text) && handlersRef.current.onRevise) {
-            handlersRef.current.onRevise(last.id, text, meta);
-            session.last = { ...last, text, at: Date.now() };
+        const setLine = (line, before, piece) => {
+          handlersRef.current.onRevise(last.id, line, meta);
+          session.last = { ...last, line, before, piece, endedAt, at: now };
+        };
+        if (last && now - last.at < REPEAT_WINDOW_MS) {
+          if (last.piece.includes(text)) return;
+          if (text.startsWith(last.piece)) {
+            setLine(last.before ? joinText(last.before, text, lang) : text, last.before, text);
             return;
           }
         }
+        if (last && carriesOn === last) {
+          setLine(joinText(last.line, text, lang), last.line, text);
+          return;
+        }
         const id = handlersRef.current.onFinal(text, meta);
-        session.last = { id, text, at: Date.now() };
+        session.last = { id, line: text, before: '', piece: text, endedAt, at: now };
       };
+      session.finish = finish;
 
       // The microphone is really listening (after any permission popup was answered).
       // Any sign of life counts, in case a browser skips one of these events.
@@ -215,7 +259,7 @@ export function useSpeechRecognition({ onFinal, onRevise, onError }) {
         // restart plays its beep, so it isn't stopped any earlier there.
         if (android || !pending.trim()) return;
         session.commitTimer = setTimeout(() => {
-          if (!isCurrent() || interimRef.current !== pending) return;
+          if (!isCurrent() || pendingRef.current !== pending) return;
           session.committing = true;
           // Chrome turns the words so far into a final result, then ends; onend restarts it.
           rec.stop();
@@ -230,6 +274,7 @@ export function useSpeechRecognition({ onFinal, onRevise, onError }) {
         // skipped by position: Android's `resultIndex` can't be trusted, and it
         // sends finished results again.
         let pending = '';
+        let finished = false;
         for (let i = run.used; i < event.results.length; i++) {
           const result = event.results[i];
           const { transcript, confidence } = result[0];
@@ -237,14 +282,25 @@ export function useSpeechRecognition({ onFinal, onRevise, onError }) {
           if (final && !pending) {
             finish(transcript);
             run.used = i + 1;
+            finished = true;
           } else {
             pending += transcript;
           }
         }
+        if (!isCurrent()) return;
+
+        const now = Date.now();
+        if (pending.trim() && (finished || !pendingRef.current)) {
+          // New words: decide now whether they carry on the last line, so they
+          // are shown (and translated live) together with it.
+          session.heardFrom = now;
+          session.carriesOn = lineToCarryOn(now);
+        }
         // The same words sent again (common in noise) don't count as a change,
         // so they don't hold back finishing the sentence.
-        if (isCurrent() && pending !== interimRef.current) {
-          setPending(pending);
+        if (finished || pending !== pendingRef.current) {
+          if (pending.trim()) session.heardAt = now;
+          show(pending);
           scheduleCommit(pending);
         }
       };
@@ -273,7 +329,7 @@ export function useSpeechRecognition({ onFinal, onRevise, onError }) {
         }
 
         // Words that never became a final result would otherwise be lost.
-        const leftover = interimRef.current;
+        const leftover = pendingRef.current;
         setPending('');
         finish(leftover);
 

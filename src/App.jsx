@@ -133,7 +133,7 @@ export default function App() {
       const update = (patch) => isLatest() && updateEntry(entry.id, patch);
 
       // Until the new translation arrives, show the one there is (faded).
-      update({ state: 'translating', draft: entry.translation || entry.draft || null, translation: '', error: null });
+      update({ state: 'translating', draft: entry.draft || entry.translation || null, translation: '', error: null });
 
       const run = (translator) =>
         withRetry(
@@ -214,19 +214,31 @@ export default function App() {
     [setEntries, translateEntry],
   );
 
-  // The browser sent a sentence again with more words: the line gets the longer text.
+  // A line got more words (the speaker went on after a short pause, or the
+  // browser sent the sentence again with more words): translate it as a whole.
   const reviseUtterance = useCallback(
     (id, text, { from, to }) => {
       const list = entriesRef.current;
       const index = list.findIndex((entry) => entry.id === id);
       const before = index === -1 ? list : list.slice(0, index);
+      const live = liveLastRef.current;
+      liveLastRef.current = null;
+
+      // The whole line was already translated while it was being said.
+      if (live && sameText(live.text, text)) {
+        jobsRef.current.set(id, (jobsRef.current.get(id) ?? 0) + 1); // drop any older request
+        updateEntry(id, { source: text, state: 'done', translation: live.translation, draft: null, engine: live.engine, error: null });
+        return;
+      }
+
       setEntries((all) => all.map((entry) => (entry.id === id ? { ...entry, source: text } : entry)));
       translateEntry(
-        { ...list[index], id, source: text, from, to },
+        // Until then: the live translation of most of the line, or the line's old translation.
+        { ...list[index], id, source: text, from, to, draft: live?.translation || list[index]?.translation || null },
         before.slice(-CONTEXT_SIZE).map((entry) => entry.source),
       );
     },
-    [setEntries, translateEntry],
+    [setEntries, translateEntry, updateEntry],
   );
 
   // Also used for "Translate again" — e.g. after switching engines.
